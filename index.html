@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="Portal de Transporte da AC Parceria e Terraplenagem">
+  <meta name="theme-color" content="#b00000" />
+  <title>AC Parceria - Portal de Transporte</title>
+  
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="logo.jpg" type="image/jpg">
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
+  
+  <!-- CSS externo -->
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- JS externo -->
+  <script src="firebase-config.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+
+<header>
+  <img src="logo.jpg" alt="AC Logo" class="logo" />
+  <h1>AC PARCERIA E TERRAPLENAGEM — Portal de Transporte</h1>
+</header>
+
+<main id="app-container">
+  <!-- Tela de seleção de tipo de usuário -->
+  <section id="welcome" class="welcome" aria-labelledby="welcomeTitle">
+    <img src="avatar.png" class="avatar" alt="Avatar AC" />
+    <div>
+      <h2 id="welcomeTitle">Bem-vindo ao Portal de Transporte</h2>
+      <p>Selecione seu tipo de acesso:</p>
+      
+      <div class="user-type-selector">
+        <button class="btn user-type-btn" onclick="selectUserType('motorista')">
+          <i class="fas fa-bus"></i>
+          Motorista
+        </button>
+        
+        <button class="btn user-type-btn" onclick="selectUserType('passageiro')">
+          <i class="fas fa-user"></i>
+          Passageiro
+        </button>
+        
+        <button class="btn user-type-btn" onclick="selectUserType('admin')">
+          <i class="fas fa-user-shield"></i>
+          Administrador
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Telas serão carregadas dinamicamente -->
+</main>
+
+<!-- Modal genérico -->
+<div id="modalBack" class="modal-back" aria-hidden="true" style="display:none">
+  <div class="modal">
+    <button class="close" onclick="closeModal()" aria-label="Fechar">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- Template para mensagens -->
+<div id="messageTemplate" style="display:none">
+  <div class="message">
+    <div class="message-header">
+      <span class="message-title"></span>
+      <span class="message-time"></span>
+    </div>
+    <div class="message-body"></div>
+  </div>
+</div>
+
+</body>
+</html>
