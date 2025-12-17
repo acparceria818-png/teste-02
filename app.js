@@ -349,7 +349,7 @@ async function obterLocalizacaoInteligente() {
     // Tentativa 1: GPS rápido (5 segundos)
     const tentativaRapida = {
       enableHighAccuracy: false,  // Mais rápido
-      timeout: 5000,
+      timeout: 15000,
       maximumAge: 30000          // Aceita localização de até 30 segundos atrás
     };
     
@@ -514,8 +514,8 @@ window.iniciarRota = async function (nomeRota) {
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5000,
-        timeout: 10000
+        maximumAge: 50000,
+        timeout: 100000
       }
     );
 
