@@ -1059,6 +1059,28 @@ textarea.form-input {
   font-size: var(--font-size-sm);
 }
 
+/* Status da rota */
+.rota-status {
+  font-weight: bold;
+  color: #4CAF50;
+  padding: 8px 12px;
+  background: #e8f5e9;
+  border-radius: 4px;
+  display: inline-block;
+  margin: 5px 0;
+}
+
+.rota-status.simulada {
+  color: #FF9800;
+  background: #FFF3E0;
+  border-left: 4px solid #FF9800;
+}
+
+.rota-status.simulada:after {
+  content: " 🎮";
+  font-size: 0.9em;
+}
+
 /* ========== ADMIN DASHBOARD ========== */
 .stats-grid {
   display: grid;
