@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Importar Dados - AC Transporte</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+</head>
+<body>
+  <h1>Importar Dados dos Colaboradores</h1>
+  
+  <div>
+    <h3>Cole o JSON dos colaboradores:</h3>
+    <textarea id="jsonData" rows="20" cols="80" placeholder='[
+  {
+    "matricula": "AC001",
+    "nome": "João Silva",
+    "email": "joao@acparceria.com",
+    "perfil": "motorista",
+    "ativo": true
+  }
+]'></textarea>
+  </div>
+  
+  <div>
+    <button onclick="importarDados()">Importar para Firebase</button>
+  </div>
+  
+  <div id="resultado"></div>
+  
+  <script>
+    // SUAS CONFIGURAÇÕES FIREBASE AQUI
+    const firebaseConfig = {
+      apiKey: "SUA_API_KEY_AQUI",
+      authDomain: "ac-parceria-transporte.firebaseapp.com",
+      projectId: "ac-parceria-transporte",
+      storageBucket: "ac-parceria-transporte.appspot.com",
+      messagingSenderId: "SEU_SENDER_ID",
+      appId: "SEU_APP_ID"
+    };
+
+    // Inicializar Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    async function importarDados() {
+      const jsonText = document.getElementById('jsonData').value;
+      const resultadoDiv = document.getElementById('resultado');
+      
+      try {
+        const colaboradores = JSON.parse(jsonText);
+        let contador = 0;
+        
+        for (const colaborador of colaboradores) {
+          const matricula = colaborador.matricula;
+          
+          // Adicionar/atualizar documento
+          await db.collection('colaboradores').doc(matricula).set(colaborador);
+          contador++;
+          
+          console.log(`Importado: ${matricula} - ${colaborador.nome}`);
+        }
+        
+        resultadoDiv.innerHTML = `
+          <div style="color: green; padding: 20px; background: #d4edda; border-radius: 5px;">
+            ✅ <strong>Importação concluída com sucesso!</strong><br>
+            Total de colaboradores importados: ${contador}
+          </div>
+        `;
+        
+      } catch (error) {
+        resultadoDiv.innerHTML = `
+          <div style="color: red; padding: 20px; background: #f8d7da; border-radius: 5px;">
+            ❌ <strong>Erro na importação:</strong><br>
+            ${error.message}
+          </div>
+        `;
+        console.error('Erro:', error);
+      }
+    }
+  </script>
+</body>
+</html>
