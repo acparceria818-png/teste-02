@@ -1092,7 +1092,7 @@ async function buscarClimaAtual() {
   try {
     // API de clima (exemplo com OpenWeatherMap)
     // Para produção, você precisa de uma chave de API
-    const response = await fetch('https://api.openweathermap.org/data/2.5/weather?q=Sao Paulo,BR&units=metric&lang=pt_br&appid=SUA_API_KEY_AQUI');
+    const response = await fetch('https://api.openweathermap.org/data/2.5/weather?q=Sao Paulo,BR&units=metric&lang=pt_br&appid=d695613e30d7ae87a2254c7eeb373b66');
     const data = await response.json();
     
     if (data.main) {
