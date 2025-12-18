@@ -1,6 +1,4 @@
-// firebase.js - Configuração completa do Firebase (CORRIGIDA)
-
-// ================= IMPORTAÇÕES =================
+// firebase.js - CONFIGURAÇÃO COMPLETA COM TODAS AS FUNÇÕES
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 
 import { 
@@ -9,13 +7,15 @@ import {
   getDoc, 
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   onSnapshot,
   query,
   where,
   getDocs,
   addDoc,
-  serverTimestamp
+  serverTimestamp,
+  orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import { 
@@ -108,6 +108,54 @@ async function registrarAviso(dados) {
   });
 }
 
+// ================= FUNÇÕES AVANÇADAS (NOVAS) =================
+
+// AVISOS - CRUD completo
+async function getAvisos() {
+  const q = query(collection(db, 'avisos'), orderBy('timestamp', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function updateAviso(avisoId, dados) {
+  const docRef = doc(db, 'avisos', avisoId);
+  return await updateDoc(docRef, {
+    ...dados,
+    timestamp: serverTimestamp()
+  });
+}
+
+async function deleteAviso(avisoId) {
+  const docRef = doc(db, 'avisos', avisoId);
+  return await deleteDoc(docRef);
+}
+
+// ESCALAS - CRUD completo
+async function getEscalas() {
+  const snapshot = await getDocs(collection(db, 'escalas'));
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function addEscala(dados) {
+  return await addDoc(collection(db, 'escalas'), {
+    ...dados,
+    timestamp: serverTimestamp()
+  });
+}
+
+async function updateEscala(escalaId, dados) {
+  const docRef = doc(db, 'escalas', escalaId);
+  return await updateDoc(docRef, {
+    ...dados,
+    timestamp: serverTimestamp()
+  });
+}
+
+async function deleteEscala(escalaId) {
+  const docRef = doc(db, 'escalas', escalaId);
+  return await deleteDoc(docRef);
+}
+
 // ================= MONITORAMENTO =================
 function monitorarRotas(callback) {
   return onSnapshot(collection(db, 'rotas_em_andamento'), snapshot => {
@@ -166,7 +214,13 @@ export {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
   serverTimestamp,
   getColaborador,
   getColaboradorByEmail,
@@ -180,5 +234,13 @@ export {
   monitorarAvisos,
   getFormsControleVeiculos,
   loginEmailSenha,
-  signOut
+  signOut,
+  // Novas funções
+  getAvisos,
+  updateAviso,
+  deleteAviso,
+  getEscalas,
+  addEscala,
+  updateEscala,
+  deleteEscala
 };
