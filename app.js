@@ -57,7 +57,10 @@ let estadoApp = {
   emergenciaAtiva: false,
   avisosAtivos: [],
   escalas: [],
-  estatisticas: null
+  estatisticas: null,
+  ultimaLocalizacao: null,
+  distanciaTotal: 0,
+  onlineUsers: []
 };
 
 // Dados de ônibus disponíveis
@@ -89,6 +92,9 @@ const ROTAS_DISPONIVEIS = [
 document.addEventListener('DOMContentLoaded', () => {
   console.log('🚀 AC Transporte Portal - Inicializando...');
   
+  // Adicionar rodapé em todas as páginas
+  adicionarRodape();
+  
   // Verificar sessão existente
   verificarSessao();
   
@@ -98,9 +104,26 @@ document.addEventListener('DOMContentLoaded', () => {
   initEventListeners();
   initConnectionMonitor();
   initAvisos();
+  iniciarMonitoramentoOnline();
   
   console.log('✅ Aplicativo inicializado com sucesso');
 });
+
+// ========== ADICIONAR RODAPÉ ==========
+function adicionarRodape() {
+  const footer = document.createElement('footer');
+  footer.className = 'footer-dev';
+  footer.innerHTML = `
+    <div class="footer-content">
+      <span>Desenvolvido por Juan Sales</span>
+      <div class="footer-contacts">
+        <a href="tel:+5594992233753"><i class="fas fa-phone"></i> (94) 99223-3753</a>
+        <a href="mailto:Juansalesadm@gmail.com"><i class="fas fa-envelope"></i> Juansalesadm@gmail.com</a>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(footer);
+}
 
 // ========== GERENCIAMENTO DE SESSÃO ==========
 function verificarSessao() {
@@ -115,12 +138,13 @@ function verificarSessao() {
     mostrarTela('tela-motorista');
     updateUserStatus(nome, matricula);
     iniciarMonitoramentoAvisos();
-    carregarEscalaMotorista(matricula); // Carregar escala específica do motorista
+    carregarEscalaMotorista(matricula);
     
     // Carregar ônibus salvo
     const onibusSalvo = localStorage.getItem('onibus_ativo');
     if (onibusSalvo) {
       estadoApp.onibusAtivo = JSON.parse(onibusSalvo);
+      atualizarInfoOnibus();
     }
   } else if (perfil === 'passageiro') {
     estadoApp.perfil = 'passageiro';
@@ -149,6 +173,22 @@ function updateUserStatus(nome, matricula) {
   if (userName) userName.textContent = nome;
   if (motoristaNome) motoristaNome.textContent = nome;
   if (motoristaMatricula) motoristaMatricula.textContent = matricula;
+  
+  // Atualizar tags do motorista
+  atualizarInfoOnibus();
+}
+
+function atualizarInfoOnibus() {
+  if (!estadoApp.motorista || !estadoApp.onibusAtivo) return;
+  
+  const userTags = document.querySelector('.user-tags');
+  if (!userTags) return;
+  
+  userTags.innerHTML = `
+    <span class="user-tag"><i class="fas fa-bus"></i> ${estadoApp.onibusAtivo.placa}</span>
+    <span class="user-tag"><i class="fas fa-tag"></i> ${estadoApp.onibusAtivo.tag_ac}</span>
+    <span class="user-tag"><i class="fas fa-id-card"></i> ${estadoApp.onibusAtivo.tag_vale}</span>
+  `;
 }
 
 // ========== SELEÇÃO DE PERFIL ==========
@@ -297,14 +337,14 @@ function solicitarPermissaoLocalizacao() {
   showLoading('📍 Obtendo localização...');
   
   const options = {
-    enableHighAccuracy: false,
-    timeout: 8000,
-    maximumAge: 30000
+    enableHighAccuracy: true, // Alterado para true para melhor precisão
+    timeout: 10000,
+    maximumAge: 0
   };
   
   navigator.geolocation.getCurrentPosition(
     (position) => {
-      console.log('✅ GPS obtido no login');
+      console.log('✅ GPS obtido no login:', position.coords);
       hideLoading();
       finalizarLoginComGPS(position);
     },
@@ -332,7 +372,7 @@ function solicitarPermissaoLocalizacao() {
     mostrarTela('tela-motorista');
     iniciarMonitoramentoAvisos();
     
-    alert(`✅ Login realizado!\n\n👋 ${estadoApp.motorista.nome}\n🚌 ${estadoApp.onibusAtivo.placa}\n📍 GPS ativo`);
+    alert(`✅ Login realizado!\n\n👋 ${estadoApp.motorista.nome}\n🚌 ${estadoApp.onibusAtivo.placa}\n📍 GPS ativo (Precisão: ${position.coords.accuracy.toFixed(0)}m)`);
   }
   
   function finalizarLoginSemGPS() {
@@ -415,7 +455,10 @@ window.logout = function () {
     emergenciaAtiva: false,
     avisosAtivos: [],
     escalas: [],
-    estatisticas: null
+    estatisticas: null,
+    ultimaLocalizacao: null,
+    distanciaTotal: 0,
+    onlineUsers: []
   };
   
   localStorage.removeItem('perfil_ativo');
@@ -440,123 +483,29 @@ window.logout = function () {
   console.log('👋 Usuário deslogado');
 };
 
-// ========== SISTEMA DE GPS INTELIGENTE ==========
-async function obterLocalizacaoInteligente() {
-  console.log('📍 Sistema GPS Inteligente iniciado...');
+// ========== SISTEMA DE GPS EM TEMPO REAL ==========
+async function obterLocalizacaoTempoReal() {
+  console.log('📍 Sistema GPS Tempo Real iniciado...');
   
   return new Promise((resolve, reject) => {
-    const tentativaRapida = {
-      enableHighAccuracy: false,
-      timeout: 8000,
-      maximumAge: 30000
+    const opcoesGPS = {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
     };
-    
-    let tentativaAtiva = true;
     
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        if (!tentativaAtiva) return;
-        tentativaAtiva = false;
-        console.log('✅ GPS obtido rapidamente');
+        console.log('✅ GPS obtido em tempo real:', pos.coords);
         resolve(pos);
       },
-      async (err) => {
-        if (!tentativaAtiva) return;
-        
-        console.log('⚠️ GPS rápido falhou, tentando modo preciso...');
-        
-        const tentativaPrecisa = {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 0
-        };
-        
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (!tentativaAtiva) return;
-            tentativaAtiva = false;
-            console.log('✅ GPS obtido em modo preciso');
-            resolve(pos);
-          },
-          async (err2) => {
-            if (!tentativaAtiva) return;
-            
-            console.log('⚠️ Ambas tentativas GPS falharam, usando fallback...');
-            
-            const localizacaoFallback = await obterLocalizacaoFallback();
-            if (localizacaoFallback) {
-              tentativaAtiva = false;
-              resolve(localizacaoFallback);
-            } else {
-              reject(err2);
-            }
-          },
-          tentativaPrecisa
-        );
+      (err) => {
+        console.warn('❌ GPS tempo real falhou:', err.message);
+        reject(err);
       },
-      tentativaRapida
+      opcoesGPS
     );
-    
-    setTimeout(() => {
-      if (tentativaAtiva) {
-        tentativaAtiva = false;
-        console.log('⏱️ Timeout global do GPS');
-        reject(new Error('Timeout global do GPS'));
-      }
-    }, 20000);
   });
-}
-
-async function obterLocalizacaoFallback() {
-  console.log('🔄 Usando fallback de localização...');
-  
-  try {
-    const ipResponse = await fetch('https://ipapi.co/json/');
-    if (ipResponse.ok) {
-      const ipData = await ipResponse.json();
-      console.log('📍 Localização via IP:', ipData.city, ipData.region);
-      
-      return {
-        coords: {
-          latitude: parseFloat(ipData.latitude),
-          longitude: parseFloat(ipData.longitude),
-          accuracy: 50000,
-          speed: 0
-        },
-        timestamp: Date.now()
-      };
-    }
-  } catch (error) {
-    console.log('❌ Fallback IP falhou');
-  }
-  
-  console.log('📍 Usando localização simulada padrão');
-  const agora = new Date();
-  const hora = agora.getHours();
-  
-  const basesSP = [
-    { lat: -23.5505, lng: -46.6333, nome: 'Centro SP' },
-    { lat: -23.9626, lng: -46.3889, nome: 'Santos' },
-    { lat: -23.1899, lng: -45.8905, nome: 'São José Campos' },
-    { lat: -22.9068, lng: -43.1729, nome: 'Rio de Janeiro' }
-  ];
-  
-  const baseIndex = hora % basesSP.length;
-  const base = basesSP[baseIndex];
-  
-  const variacao = 0.05;
-  const lat = base.lat + (Math.random() * variacao * 2 - variacao);
-  const lng = base.lng + (Math.random() * variacao * 2 - variacao);
-  
-  return {
-    coords: {
-      latitude: lat,
-      longitude: lng,
-      accuracy: 1000 + Math.random() * 2000,
-      speed: 30 + Math.random() * 50
-    },
-    timestamp: Date.now()
-  };
 }
 
 // ========== FUNÇÕES DE ROTA E LOCALIZAÇÃO ==========
@@ -569,7 +518,7 @@ window.iniciarRota = async function (nomeRota) {
     return;
   }
 
-  if (!confirm(`🚀 Iniciar Rota: ${nomeRota}\n\nÔnibus: ${estadoApp.onibusAtivo.placa}\n\nSua localização será compartilhada.`)) {
+  if (!confirm(`🚀 Iniciar Rota: ${nomeRota}\n\nÔnibus: ${estadoApp.onibusAtivo.placa}\n\nSua localização será compartilhada em tempo real.`)) {
     return;
   }
 
@@ -583,79 +532,60 @@ window.iniciarRota = async function (nomeRota) {
 
   try {
     let position;
-    let usandoFallback = false;
     
     try {
-      position = await obterLocalizacaoInteligente();
+      position = await obterLocalizacaoTempoReal();
       console.log('📍 Localização obtida:', position.coords);
     } catch (erro) {
-      console.warn('❌ GPS falhou, usando fallback:', erro);
-      position = await obterLocalizacaoFallback();
-      usandoFallback = true;
-      console.log('📍 Localização fallback:', position.coords);
+      console.warn('❌ GPS falhou:', erro);
+      alert('❌ Não foi possível obter localização precisa. Verifique as permissões do GPS e tente novamente.');
+      if (btn) {
+        btn.classList.remove('loading');
+        btn.textContent = btnOriginalText;
+        btn.disabled = false;
+      }
+      return;
     }
     
-    await enviarLocalizacao(nomeRota, position.coords);
+    // Enviar primeira localização
+    await enviarLocalizacaoTempoReal(nomeRota, position.coords);
     
-    if (!usandoFallback && position.coords.accuracy < 10000) {
-      estadoApp.watchId = navigator.geolocation.watchPosition(
-        async (pos) => {
-          await enviarLocalizacao(nomeRota, pos.coords);
-        },
-        (erro) => {
-          console.warn('⚠️ Erro no monitoramento GPS:', erro);
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 5000,
-          timeout: 10000
-        }
-      );
-    } else {
-      console.log('📍 Monitoramento contínuo não iniciado (fallback ou baixa precisão)');
-    }
+    // Iniciar monitoramento contínuo
+    estadoApp.watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        await enviarLocalizacaoTempoReal(nomeRota, pos.coords);
+      },
+      (erro) => {
+        console.warn('⚠️ Erro no monitoramento GPS:', erro);
+        mostrarNotificacao('⚠️ GPS', 'Problema na obtenção da localização');
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 10000
+      }
+    );
     
     estadoApp.rotaAtiva = nomeRota;
     
     const rotaStatus = document.getElementById('rotaStatus');
     if (rotaStatus) {
-      rotaStatus.textContent = `📍 Rota ativa: ${nomeRota} ${usandoFallback ? '(Simulado)' : ''}`;
-      if (usandoFallback) {
-        rotaStatus.classList.add('simulada');
-      }
+      rotaStatus.textContent = `📍 Rota ativa: ${nomeRota}`;
+      rotaStatus.classList.remove('simulada');
     }
     
     const pararBtn = document.getElementById('pararRotaBtn');
     if (pararBtn) pararBtn.style.display = 'block';
     
-    if (usandoFallback) {
-      mostrarNotificacao('🎮 Rota Iniciada (Simulada)', 
-        `Rota "${nomeRota}" iniciada com localização simulada para testes.`);
-    } else {
-      mostrarNotificacao('✅ Rota Iniciada', `Rota "${nomeRota}" iniciada com sucesso!`);
-    }
+    mostrarNotificacao('✅ Rota Iniciada', `Rota "${nomeRota}" iniciada com sucesso!`);
     
     mostrarTela('tela-motorista');
     
-    if (usandoFallback) {
-      alert(`✅ Rota "${nomeRota}" iniciada com localização SIMULADA!\n\n📍 Para testes no computador\n🚌 Ônibus: ${estadoApp.onibusAtivo.placa}\n\nNo celular real, o GPS funcionará automaticamente.`);
-    } else {
-      alert(`✅ Rota "${nomeRota}" iniciada com sucesso!\n\n📍 Localização ativa\n🚌 Ônibus: ${estadoApp.onibusAtivo.placa}`);
-    }
+    alert(`✅ Rota "${nomeRota}" iniciada com sucesso!\n\n📍 Localização ativa em tempo real\n🚌 Ônibus: ${estadoApp.onibusAtivo.placa}\n🎯 Precisão: ${position.coords.accuracy.toFixed(0)}m`);
 
   } catch (erro) {
     console.error('❌ Erro ao iniciar rota:', erro);
-    
-    if (erro.code === 3 || erro.message.includes('Timeout')) {
-      const usarSimulado = confirm(`⏱️ GPS demorando muito para responder.\n\nDeseja:\n• "OK" = Usar localização simulada para testes\n• "Cancelar" = Tentar novamente mais tarde`);
-      
-      if (usarSimulado) {
-        setTimeout(() => window.iniciarRota(nomeRota), 100);
-      }
-    } else {
-      alert(`❌ Não foi possível iniciar a rota:\n\n${erro.message || 'Erro desconhecido'}\n\nVerifique sua conexão e tente novamente.`);
-    }
-    
+    alert(`❌ Não foi possível iniciar a rota:\n\n${erro.message || 'Erro desconhecido'}\n\nVerifique sua conexão e tente novamente.`);
   } finally {
     if (btn) {
       btn.classList.remove('loading');
@@ -665,7 +595,7 @@ window.iniciarRota = async function (nomeRota) {
   }
 };
 
-async function enviarLocalizacao(nomeRota, coords) {
+async function enviarLocalizacaoTempoReal(nomeRota, coords) {
   if (!estadoApp.motorista || !estadoApp.onibusAtivo) return;
 
   try {
@@ -684,7 +614,7 @@ async function enviarLocalizacao(nomeRota, coords) {
     estadoApp.distanciaTotal = (estadoApp.distanciaTotal || 0) + distanciaKm;
     estadoApp.ultimaLocalizacao = coords;
 
-    await updateLocalizacao(estadoApp.motorista.matricula, {
+    const dadosAtualizacao = {
       motorista: estadoApp.motorista.nome,
       matricula: estadoApp.motorista.matricula,
       email: estadoApp.motorista.email,
@@ -696,14 +626,21 @@ async function enviarLocalizacao(nomeRota, coords) {
       capacidade: 50,
       latitude: coords.latitude,
       longitude: coords.longitude,
-      velocidade: coords.speed ? (coords.speed * 3.6).toFixed(1) : null,
+      velocidade: coords.speed ? (coords.speed * 3.6).toFixed(1) : '0',
       precisao: coords.accuracy,
-      distancia: estadoApp.distanciaTotal.toFixed(2), // KM rodados
+      distancia: estadoApp.distanciaTotal.toFixed(2),
       ativo: true,
-      timestamp: new Date()
-    });
+      timestamp: new Date(),
+      online: true,
+      ultimaAtualizacao: new Date()
+    };
     
-    console.log('📍 Localização enviada:', new Date().toLocaleTimeString(), 'Distância:', estadoApp.distanciaTotal.toFixed(2), 'km');
+    await updateLocalizacao(estadoApp.motorista.matricula, dadosAtualizacao);
+    
+    console.log('📍 Localização enviada:', new Date().toLocaleTimeString(), 
+                'Distância:', estadoApp.distanciaTotal.toFixed(2), 'km',
+                'Velocidade:', dadosAtualizacao.velocidade, 'km/h',
+                'Precisão:', coords.accuracy.toFixed(0), 'm');
   } catch (erro) {
     console.error('Erro ao enviar localização:', erro);
   }
@@ -738,6 +675,7 @@ window.pararRota = function () {
   if (estadoApp.motorista) {
     updateLocalizacao(estadoApp.motorista.matricula, {
       ativo: false,
+      online: false,
       timestamp: new Date()
     });
   }
@@ -748,7 +686,7 @@ window.pararRota = function () {
   mostrarNotificacao('⏹️ Rota Encerrada', 'Localização não está mais sendo compartilhada.');
 };
 
-// ========== BOTÃO DE EMERGÊNCIA ==========
+// ========== BOTÃO DE EMERGÊNCIA COM SINISTRO ==========
 window.ativarEmergencia = async function() {
   if (!estadoApp.motorista) {
     alert('❌ Faça login como motorista para usar esta função');
@@ -763,9 +701,16 @@ window.ativarEmergencia = async function() {
     return;
   }
   
-  const tipo = prompt('Tipo de emergência:\n1. Acidente\n2. Problema mecânico\n3. Problema de saúde\n4. Outro\n\nDigite o número:');
+  // Mostrar opções
+  const opcao = await mostrarOpcoesEmergencia();
   
-  if (!tipo) return;
+  if (!opcao) return;
+  
+  if (opcao === 'sinistro') {
+    // Abrir formulário de sinistro
+    window.open('https://forms.gle/ima9J1SrgVyYVgvc9', '_blank');
+    return;
+  }
   
   const descricao = prompt('Descreva brevemente a situação:');
   if (!descricao) return;
@@ -776,7 +721,7 @@ window.ativarEmergencia = async function() {
       matricula: estadoApp.motorista.matricula,
       onibus: estadoApp.onibusAtivo?.placa || 'Não informado',
       rota: estadoApp.rotaAtiva || 'Não informada',
-      tipo: getTipoEmergencia(tipo),
+      tipo: opcao,
       descricao: descricao,
       status: 'pendente',
       timestamp: new Date()
@@ -798,14 +743,56 @@ window.ativarEmergencia = async function() {
   }
 };
 
-function getTipoEmergencia(numero) {
-  const tipos = {
-    '1': 'Acidente',
-    '2': 'Problema mecânico',
-    '3': 'Problema de saúde',
-    '4': 'Outro'
-  };
-  return tipos[numero] || 'Outro';
+function mostrarOpcoesEmergencia() {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-back';
+    modal.innerHTML = `
+      <div class="modal">
+        <button class="close" onclick="this.parentElement.parentElement.remove(); resolve(null)">✕</button>
+        <h3><i class="fas fa-exclamation-triangle"></i> Tipo de Emergência</h3>
+        <p>Selecione o tipo de emergência:</p>
+        
+        <div class="sinistro-options">
+          <div class="sinistro-option" onclick="selecionarOpcao('acidente')">
+            <i class="fas fa-car-crash"></i>
+            <h4>Acidente</h4>
+          </div>
+          
+          <div class="sinistro-option" onclick="selecionarOpcao('mecanico')">
+            <i class="fas fa-cog"></i>
+            <h4>Problema Mecânico</h4>
+          </div>
+          
+          <div class="sinistro-option" onclick="selecionarOpcao('saude')">
+            <i class="fas fa-heartbeat"></i>
+            <h4>Problema de Saúde</h4>
+          </div>
+          
+          <div class="sinistro-option" onclick="selecionarOpcao('sinistro')">
+            <i class="fas fa-file-alt"></i>
+            <h4>Sinistro/Avaria</h4>
+            <small>Preencher formulário</small>
+          </div>
+        </div>
+        
+        <div class="action-footer">
+          <button class="btn btn-secondary" onclick="this.parentElement.parentElement.parentElement.remove(); resolve(null)">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+    
+    // Configurar handlers
+    window.selecionarOpcao = function(opcao) {
+      modal.remove();
+      resolve(opcao);
+    };
+  });
 }
 
 // ========== FEEDBACK ==========
@@ -883,7 +870,7 @@ function iniciarMonitoramentoPassageiro() {
     // Agrupar por rota
     const rotasAgrupadas = {};
     rotas.forEach(rota => {
-      if (rota.ativo !== false && rota.rota) {
+      if (rota.ativo !== false && rota.rota && rota.online !== false) {
         if (!rotasAgrupadas[rota.rota]) {
           rotasAgrupadas[rota.rota] = [];
         }
@@ -910,7 +897,7 @@ function iniciarMonitoramentoPassageiro() {
               </div>
               <div class="motorista-detalhes">
                 <small>📍 Localização ativa</small>
-                <small>⏱️ ${motorista.timestamp ? new Date(motorista.timestamp.toDate()).toLocaleTimeString() : '--:--'}</small>
+                <small>⏱️ ${motorista.ultimaAtualizacao ? new Date(motorista.ultimaAtualizacao.toDate()).toLocaleTimeString() : '--:--'}</small>
                 ${motorista.distancia ? `<small>📏 ${motorista.distancia} km rodados</small>` : ''}
                 ${motorista.velocidade ? `<small>🚗 ${motorista.velocidade} km/h</small>` : ''}
               </div>
@@ -940,7 +927,7 @@ function iniciarMonitoramentoAdmin() {
     
     if (!container) return;
     
-    const rotasAtivas = rotas.filter(r => r.ativo !== false);
+    const rotasAtivas = rotas.filter(r => r.ativo !== false && r.online !== false);
     
     if (countElement) {
       countElement.textContent = rotasAtivas.length;
@@ -989,7 +976,7 @@ function iniciarMonitoramentoAdmin() {
           </div>
           <div class="info-row">
             <span>⏱️ Última atualização:</span>
-            <span>${rota.timestamp ? new Date(rota.timestamp.toDate()).toLocaleTimeString() : '--:--'}</span>
+            <span>${rota.ultimaAtualizacao ? new Date(rota.ultimaAtualizacao.toDate()).toLocaleTimeString() : '--:--'}</span>
           </div>
           <div class="info-row">
             <span>🎯 Precisão:</span>
@@ -1157,6 +1144,77 @@ function iniciarMonitoramentoAvisos() {
   });
 }
 
+// ========== MONITORAMENTO DE USUÁRIOS ONLINE ==========
+function iniciarMonitoramentoOnline() {
+  setInterval(async () => {
+    await atualizarOnlineUsers();
+  }, 30000); // Atualizar a cada 30 segundos
+  
+  // Atualizar imediatamente
+  atualizarOnlineUsers();
+}
+
+async function atualizarOnlineUsers() {
+  try {
+    const snapshot = await getDocs(collection(db, 'rotas_em_andamento'));
+    const onlineUsers = snapshot.docs
+      .filter(doc => {
+        const data = doc.data();
+        return data.online === true && data.ativo !== false;
+      })
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    
+    estadoApp.onlineUsers = onlineUsers;
+    
+    // Atualizar contador no admin
+    const usuariosOnlineElement = document.getElementById('usuariosOnline');
+    if (usuariosOnlineElement) {
+      usuariosOnlineElement.textContent = onlineUsers.length;
+    }
+    
+    // Se estiver na tela de relatórios, atualizar a lista
+    if (document.getElementById('tela-relatorios')?.classList.contains('ativa')) {
+      atualizarListaOnlineUsers();
+    }
+  } catch (error) {
+    console.error('Erro ao buscar usuários online:', error);
+  }
+}
+
+function atualizarListaOnlineUsers() {
+  const container = document.getElementById('onlineUsersList');
+  if (!container) return;
+  
+  if (estadoApp.onlineUsers.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="fas fa-users-slash"></i>
+        <h4>Nenhum usuário online</h4>
+        <p>Nenhum motorista está ativo no momento.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = `
+    <div class="online-user-list">
+      ${estadoApp.onlineUsers.map(user => `
+        <div class="online-user-item">
+          <span class="online-dot"></span>
+          <div class="user-info">
+            <strong>${user.motorista}</strong>
+            <small>${user.onibus} • ${user.rota}</small>
+          </div>
+          <small>${user.ultimaAtualizacao ? new Date(user.ultimaAtualizacao.toDate()).toLocaleTimeString() : ''}</small>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 // ========== FUNÇÕES AUXILIARES ==========
 function calcularTempoDecorrido(timestamp) {
   if (!timestamp) return 'Agora mesmo';
@@ -1212,6 +1270,7 @@ window.mostrarTela = function(id) {
       break;
     case 'tela-relatorios':
       carregarRelatorios();
+      atualizarListaOnlineUsers();
       break;
   }
   
@@ -1223,12 +1282,17 @@ function atualizarInfoMotorista() {
   
   const nomeElement = document.getElementById('motoristaNome');
   const matriculaElement = document.getElementById('motoristaMatricula');
-  const onibusElement = document.getElementById('motoristaOnibus');
   
   if (nomeElement) nomeElement.textContent = estadoApp.motorista.nome;
   if (matriculaElement) matriculaElement.textContent = estadoApp.motorista.matricula;
-  if (onibusElement && estadoApp.onibusAtivo) {
-    onibusElement.textContent = `${estadoApp.onibusAtivo.placa} (${estadoApp.onibusAtivo.tag_ac})`;
+  
+  // Adicionar tags se não existirem
+  const userInfo = document.querySelector('.user-info');
+  if (userInfo && !document.querySelector('.user-tags')) {
+    const tagsDiv = document.createElement('div');
+    tagsDiv.className = 'user-tags';
+    userInfo.appendChild(tagsDiv);
+    atualizarInfoOnibus();
   }
 }
 
@@ -1248,10 +1312,12 @@ async function carregarRotasPassageiro() {
     // Agrupar por rota
     const rotasAgrupadas = {};
     rotasAtivas.forEach(rota => {
-      if (!rotasAgrupadas[rota.rota]) {
-        rotasAgrupadas[rota.rota] = [];
+      if (rota.online !== false) {
+        if (!rotasAgrupadas[rota.rota]) {
+          rotasAgrupadas[rota.rota] = [];
+        }
+        rotasAgrupadas[rota.rota].push(rota);
       }
-      rotasAgrupadas[rota.rota].push(rota);
     });
     
     if (Object.keys(rotasAgrupadas).length === 0) {
@@ -1266,7 +1332,7 @@ async function carregarRotasPassageiro() {
       return;
     }
     
-    // Mostrar todas as rotas disponíveis, mesmo as sem motoristas ativos
+    // Mostrar todas as rotas disponíveis
     let html = '<div class="rotas-passageiro-grid">';
     
     ROTAS_DISPONIVEIS.forEach(rota => {
@@ -1303,7 +1369,7 @@ async function carregarRotasPassageiro() {
                   <div class="motorista-detalhes">
                     ${motorista.distancia ? `<small>📏 ${motorista.distancia} km rodados</small>` : ''}
                     ${motorista.velocidade ? `<small>🚗 ${motorista.velocidade} km/h</small>` : ''}
-                    <small>📍 ${motorista.timestamp ? new Date(motorista.timestamp.toDate()).toLocaleTimeString() : '--:--'}</small>
+                    <small>📍 ${motorista.ultimaAtualizacao ? new Date(motorista.ultimaAtualizacao.toDate()).toLocaleTimeString() : '--:--'}</small>
                   </div>
                   <button class="btn small" onclick="verLocalizacaoMotorista(${motorista.latitude}, ${motorista.longitude}, '${motorista.motorista}', '${motorista.onibus}')">
                     📍 Ver Mapa
@@ -1343,6 +1409,13 @@ async function carregarRotasPassageiro() {
     hideLoading();
   }
 }
+
+// ========== FUNÇÃO verLocalizacaoRota (CORRIGIDA) ==========
+window.verLocalizacaoRota = function(nomeRota) {
+  console.log('Ver detalhes da rota:', nomeRota);
+  // Implementar lógica para mostrar detalhes da rota
+  alert(`Detalhes da rota: ${nomeRota}\n\nEm desenvolvimento...`);
+};
 
 // ========== CARREGAMENTO DE ROTAS PARA MOTORISTA ==========
 function carregarRotas() {
@@ -1507,7 +1580,7 @@ window.verMotoristasNaRota = async function(nomeRota) {
           </div>
           <div class="info-row">
             <span><i class="fas fa-clock"></i> Última atualização:</span>
-            <span>${motorista.timestamp ? new Date(motorista.timestamp.toDate()).toLocaleTimeString() : '--:--'}</span>
+            <span>${motorista.ultimaAtualizacao ? new Date(motorista.ultimaAtualizacao.toDate()).toLocaleTimeString() : '--:--'}</span>
           </div>
           <div class="info-row">
             <span><i class="fas fa-map-marker-alt"></i> Localização:</span>
@@ -2519,6 +2592,27 @@ async function carregarRelatorios() {
     const estatisticas = await getEstatisticasDashboard();
     estadoApp.estatisticas = estatisticas;
     
+    // Buscar dados reais de rotas frequentes
+    const q = query(collection(db, 'rotas_em_andamento'), 
+      where("ativo", "==", true),
+      orderBy("timestamp", "desc")
+    );
+    const snapshot = await getDocs(q);
+    const rotasAtivas = snapshot.docs.map(d => d.data());
+    
+    // Contar frequência de rotas
+    const frequenciaRotas = {};
+    rotasAtivas.forEach(rota => {
+      if (rota.rota) {
+        frequenciaRotas[rota.rota] = (frequenciaRotas[rota.rota] || 0) + 1;
+      }
+    });
+    
+    // Ordenar por frequência
+    const rotasFrequentes = Object.entries(frequenciaRotas)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    
     // Atualizar tela de relatórios
     const container = document.getElementById('relatoriosContainer');
     if (container) {
@@ -2532,8 +2626,8 @@ async function carregarRelatorios() {
                 <div class="stat-label">Rotas Ativas</div>
               </div>
               <div class="stat-item">
-                <div class="stat-number">${estatisticas.motoristasAtivos}</div>
-                <div class="stat-label">Motoristas Ativos</div>
+                <div class="stat-number">${estadoApp.onlineUsers.length}</div>
+                <div class="stat-label">Usuários Online</div>
               </div>
               <div class="stat-item">
                 <div class="stat-number">${estatisticas.totalEmergencias}</div>
@@ -2564,24 +2658,36 @@ async function carregarRelatorios() {
           <div class="dashboard-card">
             <h3><i class="fas fa-bus"></i> Rotas Mais Frequentes</h3>
             <div class="rotas-frequentes">
-              ${ROTAS_DISPONIVEIS.slice(0, 5).map(rota => `
-                <div class="rota-frequente-item">
-                  <span>${rota.nome}</span>
-                  <span class="rota-count">${Math.floor(Math.random() * 10)} viagens</span>
-                </div>
-              `).join('')}
+              ${rotasFrequentes.length > 0 ? 
+                rotasFrequentes.map(([rota, count]) => `
+                  <div class="rota-frequente-item">
+                    <span>${rota}</span>
+                    <span class="rota-count">${count} viagens</span>
+                  </div>
+                `).join('') : 
+                '<p class="empty-state">Nenhuma rota registrada</p>'
+              }
             </div>
           </div>
           
           <div class="dashboard-card">
-            <h3><i class="fas fa-chart-line"></i> Atividade Diária</h3>
-            <div class="atividade-diaria">
-              ${['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(dia => `
-                <div class="dia-atividade">
-                  <div class="barra-atividade" style="height: ${Math.floor(Math.random() * 80) + 20}%"></div>
-                  <span>${dia}</span>
-                </div>
-              `).join('')}
+            <h3><i class="fas fa-users"></i> Usuários Online</h3>
+            <div id="onlineUsersList">
+              <div class="online-user-list">
+                ${estadoApp.onlineUsers.length > 0 ? 
+                  estadoApp.onlineUsers.map(user => `
+                    <div class="online-user-item">
+                      <span class="online-dot"></span>
+                      <div class="user-info">
+                        <strong>${user.motorista}</strong>
+                        <small>${user.onibus} • ${user.rota}</small>
+                      </div>
+                      <small>${user.ultimaAtualizacao ? new Date(user.ultimaAtualizacao.toDate()).toLocaleTimeString() : ''}</small>
+                    </div>
+                  `).join('') : 
+                  '<div class="empty-state"><p>Nenhum usuário online</p></div>'
+                }
+              </div>
             </div>
           </div>
         </div>
@@ -2629,7 +2735,7 @@ window.exportarRelatorios = function() {
   csvContent += `Data: ${new Date().toLocaleDateString()}\n\n`;
   csvContent += "Métrica,Valor\n";
   csvContent += `Rotas Ativas,${estadoApp.estatisticas.totalRotasAtivas}\n`;
-  csvContent += `Motoristas Ativos,${estadoApp.estatisticas.motoristasAtivos}\n`;
+  csvContent += `Usuários Online,${estadoApp.onlineUsers.length}\n`;
   csvContent += `Emergências Pendentes,${estadoApp.estatisticas.totalEmergencias}\n`;
   csvContent += `Feedbacks Pendentes,${estadoApp.estatisticas.totalFeedbacks}\n\n`;
   csvContent += "Rotas por Tipo\n";
@@ -2877,50 +2983,24 @@ window.abrirSuporteWhatsApp = function() {
   window.open(url, '_blank', 'noopener,noreferrer');
 };
 
+// ========== FUNÇÕES AUXILIARES ADICIONAIS ==========
+window.verFormsControle = function() {
+  window.open('https://forms.gle/UDniKxPqcMKGUhFQA', '_blank');
+};
+
+window.verDetalhesRota = function(matricula) {
+  // Implementar lógica para ver detalhes da rota
+  alert(`Detalhes da rota para matrícula: ${matricula}\n\nEm desenvolvimento...`);
+};
+
+window.enviarNotificacaoMotorista = function(matricula) {
+  const mensagem = prompt('Digite a mensagem para o motorista:');
+  if (mensagem) {
+    alert(`Notificação enviada para o motorista ${matricula}:\n\n${mensagem}`);
+  }
+};
+
 // ========== EXPORTAR FUNÇÕES PARA ESCOPO GLOBAL ==========
-window.openModal = function(modalType) {
-  const modalId = modalType === 'avisosModal' ? 'avisosModalBack' : 'ajudaModalBack';
-  const modal = document.getElementById(modalId);
-  
-  if (modal) {
-    modal.style.display = 'flex';
-  }
-};
-
-window.closeModal = function(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) {
-    modal.style.display = 'none';
-  }
-};
-
-// Exportar todas as funções necessárias
-window.mostrarTela = mostrarTela;
-window.entrarNoPortal = entrarNoPortal;
-window.selecionarPerfil = selecionarPerfil;
-window.confirmarMatriculaMotorista = confirmarMatriculaMotorista;
-window.selecionarOnibus = selecionarOnibus;
-window.loginAdmin = loginAdmin;
-window.logout = logout;
-window.iniciarRota = iniciarRota;
-window.pararRota = pararRota;
-window.ativarEmergencia = ativarEmergencia;
-window.abrirFeedback = abrirFeedback;
-window.enviarFeedback = enviarFeedback;
-window.abrirRotaNoMaps = abrirRotaNoMaps;
-window.verLocalizacaoMotorista = verLocalizacaoMotorista;
-window.verMapaAdmin = verMapaAdmin;
-window.verMotoristasNaRota = verMotoristasNaRota;
-window.enviarNotificacaoGeral = enviarNotificacaoGeral;
-window.gerenciarAvisos = gerenciarAvisos;
-window.gerenciarEscalas = gerenciarEscalas;
-window.abrirSuporteWhatsApp = abrirSuporteWhatsApp;
-window.resolverEmergenciaAdmin = resolverEmergenciaAdmin;
-window.contatarMotoristaAdmin = contatarMotoristaAdmin;
-window.verLocalizacaoEmergencia = verLocalizacaoEmergencia;
-window.resolverFeedbackAdmin = resolverFeedbackAdmin;
-window.responderFeedbackAdmin = responderFeedbackAdmin;
-window.atualizarRelatorios = atualizarRelatorios;
-window.exportarRelatorios = exportarRelatorios;
+// As funções já são globais quando declaradas com window.functionName
 
 console.log('🚀 app.js carregado com sucesso!');
