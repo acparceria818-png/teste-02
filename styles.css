@@ -1260,7 +1260,6 @@ textarea.form-input {
 }
 
 .onibus-info {
-  background: var(--primary);
   color: var(--white);
   padding: 2px 8px;
   border-radius: var(--radius-full);
