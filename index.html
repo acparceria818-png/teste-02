@@ -234,7 +234,7 @@
         <p>Escolha a rota que irá conduzir hoje</p>
       </div>
       
-      <div class="feature-card" onclick="openModal('avisosModal')">
+      <div class="feature-card" onclick="mostrarAvisos()">
         <div class="card-icon warning">
           <i class="fas fa-bullhorn"></i>
         </div>
@@ -285,11 +285,11 @@
         <p>Botão de emergência/pânico</p>
       </div>
       
-      <div class="feature-card" onclick="window.open('tel:+5593992059914')">
+      <div class="feature-card" onclick="abrirSuporteWhatsApp()">
         <div class="card-icon">
           <i class="fas fa-phone-alt"></i>
         </div>
-        <h3>Suporte</h3>
+        <h3>Suporte WhatsApp</h3>
         <p>Contato de suporte 24h</p>
       </div>
     </div>
@@ -356,7 +356,7 @@
         <p>Veja as rotas disponíveis e motoristas ativos</p>
       </div>
       
-      <div class="feature-card" onclick="openModal('avisosModal')">
+      <div class="feature-card" onclick="mostrarAvisos()">
         <div class="card-icon warning">
           <i class="fas fa-bullhorn"></i>
         </div>
@@ -372,11 +372,11 @@
         <p>Sugestões ou reclamações</p>
       </div>
       
-      <div class="feature-card" onclick="window.open('tel:+5593992059914')">
+      <div class="feature-card" onclick="abrirSuporteWhatsApp()">
         <div class="card-icon">
           <i class="fas fa-phone-alt"></i>
         </div>
-        <h3>Suporte</h3>
+        <h3>Suporte WhatsApp</h3>
         <p>Contato de suporte</p>
       </div>
     </div>
@@ -520,6 +520,9 @@
       <button class="dashboard-tab" onclick="mostrarTab('notificacoes')">
         <i class="fas fa-bell"></i> Notificações
       </button>
+      <button class="dashboard-tab" onclick="mostrarTab('gestao')">
+        <i class="fas fa-cog"></i> Gestão
+      </button>
     </div>
     
     <div class="tab-content active" id="tabRotas">
@@ -586,19 +589,57 @@
           <i class="fas fa-paper-plane"></i> Enviar Notificação
         </button>
       </div>
-      
-      <div class="admin-actions">
-        <h4><i class="fas fa-cog"></i> Ações Rápidas</h4>
-        <div class="actions-grid">
-          <button class="btn btn-outline" onclick="verFormsControle()">
-            <i class="fas fa-file-excel"></i> Ver Forms
-          </button>
-          <button class="btn btn-outline" onclick="window.open('https://acterraplenagem-my.sharepoint.com/:x:/g/personal/juan_silva_acparceria_com_br/IQBnTKcL2bZASLBcFDYXuknRASff2HP_x3ar1G7tfIVrUj0?e=SkatOe', '_blank')">
-            <i class="fas fa-users"></i> Colaboradores
-          </button>
-          <button class="btn btn-outline" onclick="mostrarTela('tela-relatorios')">
-            <i class="fas fa-chart-bar"></i> Relatórios
-          </button>
+    </div>
+    
+    <div class="tab-content" id="tabGestao">
+      <div class="tab-header">
+        <h3><i class="fas fa-cog"></i> Gestão do Sistema</h3>
+      </div>
+      <div class="gestao-container">
+        <div class="admin-actions">
+          <h4><i class="fas fa-tools"></i> Ferramentas de Gestão</h4>
+          <div class="actions-grid">
+            <button class="btn btn-outline" onclick="gerenciarAvisos()">
+              <i class="fas fa-bullhorn"></i> Gerenciar Avisos
+            </button>
+            <button class="btn btn-outline" onclick="gerenciarEscalas()">
+              <i class="fas fa-calendar-alt"></i> Gerenciar Escalas
+            </button>
+            <button class="btn btn-outline" onclick="verFormsControle()">
+              <i class="fas fa-file-excel"></i> Ver Forms Controle
+            </button>
+            <button class="btn btn-outline" onclick="window.open('https://acterraplenagem-my.sharepoint.com/:x:/g/personal/juan_silva_acparceria_com_br/IQBnTKcL2bZASLBcFDYXuknRASff2HP_x3ar1G7tfIVrUj0?e=SkatOe', '_blank')">
+              <i class="fas fa-users"></i> Colaboradores
+            </button>
+            <button class="btn btn-outline" onclick="mostrarTela('tela-relatorios')">
+              <i class="fas fa-chart-bar"></i> Relatórios
+            </button>
+            <button class="btn btn-outline" onclick="abrirSuporteWhatsApp()">
+              <i class="fas fa-whatsapp"></i> Suporte WhatsApp
+            </button>
+          </div>
+        </div>
+        
+        <div class="info-card">
+          <h4><i class="fas fa-info-circle"></i> Informações do Sistema</h4>
+          <div class="info-list">
+            <div class="info-item">
+              <span class="info-label">Versão:</span>
+              <span class="info-value">2.0.0</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Última Atualização:</span>
+              <span class="info-value">Dezembro 2024</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Status:</span>
+              <span class="info-value status-ativo">Operacional</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Usuários Online:</span>
+              <span class="info-value" id="usuariosOnline">0</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -790,45 +831,10 @@
   <div class="modal">
     <button class="close" onclick="closeModal('avisosModalBack')" aria-label="Fechar">✕</button>
     <h3><i class="fas fa-bullhorn"></i> Avisos Importantes</h3>
-    <div class="avisos-list">
-      <div class="aviso-item">
-        <div class="aviso-header">
-          <strong>Preenchimento do Controle de Veículo</strong>
-          <span class="aviso-data">Hoje</span>
-        </div>
-        <p>O formulário de controle de veículo deve ser preenchido 2× ao dia — ao iniciar a jornada (entrada) e ao finalizar (saída).</p>
-      </div>
-      
-      <div class="aviso-item">
-        <div class="aviso-header">
-          <strong>Comunicação com a Gestão</strong>
-          <span class="aviso-data">Ontem</span>
-        </div>
-        <p>Mantenha comunicação constante com a gestão em caso de desvios ou alterações na rota.</p>
-      </div>
-      
-      <div class="aviso-item">
-        <div class="aviso-header">
-          <strong>Relato de Avarias</strong>
-          <span class="aviso-data">Esta semana</span>
-        </div>
-        <p>Relatar imediatamente qualquer avaria ou irregularidade do veículo para a equipe de manutenção.</p>
-      </div>
-      
-      <div class="aviso-item">
-        <div class="aviso-header">
-          <strong>Alteração de Rota</strong>
-          <span class="aviso-data">Esta semana</span>
-        </div>
-        <p>Não alterar rota sem autorização do setor de operações.</p>
-      </div>
-      
-      <div class="aviso-item">
-        <div class="aviso-header">
-          <strong>Rotas Overland</strong>
-          <span class="aviso-data">Este mês</span>
-        </div>
-        <p>Para rotas de retorno Overland, verificar sempre as condições da via antes de iniciar.</p>
+    <div class="avisos-list" id="avisosDinamicos">
+      <div class="loading-state">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>Carregando avisos...</p>
       </div>
     </div>
     <div class="modal-footer">
@@ -895,16 +901,20 @@
 </div>
 
 <script>
-  // Inicializar seleção de ônibus
+  // Inicializar seleção de ônibus (ATUALIZADO)
   document.addEventListener('DOMContentLoaded', function() {
     const onibusList = document.getElementById('onibusList');
     if (onibusList) {
+      // Usar os ônibus reais
       const onibus = [
-        { placa: 'ABC-1234', modelo: 'Mercedes-Benz O-500', capacidade: 50 },
-        { placa: 'DEF-5678', modelo: 'Volvo B450R', capacidade: 45 },
-        { placa: 'GHI-9012', modelo: 'Marcopolo Paradiso', capacidade: 55 },
-        { placa: 'JKL-3456', modelo: 'Neobus Mega', capacidade: 48 },
-        { placa: 'MNO-7890', modelo: 'Scania K360', capacidade: 52 }
+        { placa: 'TEZ-2J56', tag_ac: 'AC LO 583', tag_vale: '1JI347', cor: 'BRANCA', empresa: 'MUNDIAL P E L DE BENS MOVEIS LTDA' },
+        { placa: 'TEZ-2J60', tag_ac: 'AC LO 585', tag_vale: '1JI348', cor: 'BRANCA', empresa: 'MUNDIAL P E L DE BENS MOVEIS LTDA' },
+        { placa: 'TEZ-2J57', tag_ac: 'AC LO 584', tag_vale: '1JI349', cor: 'BRANCA', empresa: 'MUNDIAL P E L DE BENS MOVEIS LTDA' },
+        { placa: 'SJD5G38', tag_ac: 'AC LO 610', tag_vale: '1JI437', cor: 'BRANCA', empresa: 'MUNDIAL P E L DE BENS MOVEIS LTDA' },
+        { placa: 'SYA5A51', tag_ac: 'AC LO 611', tag_vale: '1JI436', cor: 'BRANCA', empresa: 'MUNDIAL P E L DE BENS MOVEIS LTDA' },
+        { placa: 'TEZ2J58', tag_ac: 'AC LO 609', tag_vale: '1JI420', cor: 'BRANCA', empresa: 'MUNDIAL P E L DE BENS MOVEIS LTDA' },
+        { placa: 'PZS6858', tag_ac: 'VL 080', tag_vale: '-', cor: 'BRANCA', empresa: 'A C PARCERIA E TERRAPLENAGEM LTDA' },
+        { placa: 'PZW5819', tag_ac: 'VL 083', tag_vale: '-', cor: 'BRANCA', empresa: 'A C PARCERIA E TERRAPLENAGEM LTDA' }
       ];
       
       onibusList.innerHTML = onibus.map(o => `
@@ -914,8 +924,9 @@
           </div>
           <div class="onibus-info">
             <h4>${o.placa}</h4>
-            <p>${o.modelo}</p>
-            <small><i class="fas fa-users"></i> ${o.capacidade} passageiros</small>
+            <p><strong>TAG AC:</strong> ${o.tag_ac}</p>
+            <p><strong>TAG VALE:</strong> ${o.tag_vale}</p>
+            <small><i class="fas fa-paint-brush"></i> ${o.cor}</small>
           </div>
           <div class="onibus-select">
             <i class="fas fa-chevron-right"></i>
@@ -938,10 +949,15 @@
     });
     
     // Mostrar tab selecionada
-    document.getElementById(`tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`)?.classList.add('active');
+    const tabElement = document.getElementById(`tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`);
+    if (tabElement) {
+      tabElement.classList.add('active');
+    }
     
     // Ativar botão correspondente
-    event.target.classList.add('active');
+    if (event && event.target) {
+      event.target.classList.add('active');
+    }
   }
   
   // Função de busca e filtro
@@ -967,7 +983,9 @@
     
     // Atualizar tabs ativas
     filterTabs.forEach(tab => tab.classList.remove('active'));
-    event.target.classList.add('active');
+    if (event && event.target) {
+      event.target.classList.add('active');
+    }
     
     routeItems.forEach(item => {
       const itemType = item.dataset.tipo;
@@ -991,6 +1009,30 @@
       timeout = setTimeout(later, wait);
     };
   }
+  
+  // Funções de modal
+  window.openModal = function(modalType) {
+    if (modalType === 'avisosModal') {
+      // Usar a nova função mostrarAvisos() do app.js
+      if (typeof mostrarAvisos === 'function') {
+        mostrarAvisos();
+      }
+    } else {
+      const modalId = modalType === 'ajudaModal' ? 'ajudaModalBack' : 'ajudaModalBack';
+      const modal = document.getElementById(modalId);
+      
+      if (modal) {
+        modal.style.display = 'flex';
+      }
+    }
+  };
+  
+  window.closeModal = function(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  };
 </script>
 </body>
 </html>
