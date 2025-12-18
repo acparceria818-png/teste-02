@@ -1979,6 +1979,14 @@ window.excluirAviso = async function(avisoId) {
 };
 
 // ========== GESTÃO DE ESCALAS (ADMIN) ==========
+async function carregarEscalas() {
+  try {
+    const escalas = await getEscalas();
+    estadoApp.escalas = escalas;
+  } catch (erro) {
+    console.error('Erro ao carregar escalas:', erro);
+  }
+}
 // Carregar escala específica do motorista
 async function carregarEscalaMotorista(matricula) {
   try {
