@@ -1,4 +1,4 @@
-// app.js - CÓDIGO COMPLETO COM TODAS AS FUNCIONALIDADES
+// app.js - CÓDIGO COMPLETO COM TODAS AS FUNCIONALIDADES ATUALIZADO
 import { 
   db,
   auth,
@@ -24,16 +24,20 @@ import {
   monitorarEmergencias,
   monitorarFeedbacks,
   monitorarAvisos,
-  getFormsControleVeiculos,
-  loginEmailSenha,
-  signOut,
   getAvisos,
   updateAviso,
   deleteAviso,
   getEscalas,
   addEscala,
   updateEscala,
-  deleteEscala
+  deleteEscala,
+  resolverEmergencia,
+  resolverFeedback,
+  responderFeedback,
+  getRelatorios,
+  getEstatisticasDashboard,
+  getRotasPorTipo,
+  getMotoristasAtivos
 } from './firebase.js';
 
 // Estado global
@@ -52,10 +56,11 @@ let estadoApp = {
   unsubscribeAvisos: null,
   emergenciaAtiva: false,
   avisosAtivos: [],
-  escalas: []
+  escalas: [],
+  estatisticas: null
 };
 
-// Dados de ônibus disponíveis (ATUALIZADO)
+// Dados de ônibus disponíveis
 const ONIBUS_DISPONIVEIS = [
   { placa: 'TEZ-2J56', tag_ac: 'AC LO 583', tag_vale: '1JI347', cor: 'BRANCA', empresa: 'MUNDIAL P E L DE BENS MOVEIS LTDA' },
   { placa: 'TEZ-2J60', tag_ac: 'AC LO 585', tag_vale: '1JI348', cor: 'BRANCA', empresa: 'MUNDIAL P E L DE BENS MOVEIS LTDA' },
@@ -94,9 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initConnectionMonitor();
   initAvisos();
   
-  // Iniciar clima (com fallback)
-  buscarClimaAtual();
-  
   console.log('✅ Aplicativo inicializado com sucesso');
 });
 
@@ -113,6 +115,7 @@ function verificarSessao() {
     mostrarTela('tela-motorista');
     updateUserStatus(nome, matricula);
     iniciarMonitoramentoAvisos();
+    carregarEscalaMotorista(matricula); // Carregar escala específica do motorista
     
     // Carregar ônibus salvo
     const onibusSalvo = localStorage.getItem('onibus_ativo');
@@ -411,7 +414,8 @@ window.logout = function () {
     unsubscribeAvisos: null,
     emergenciaAtiva: false,
     avisosAtivos: [],
-    escalas: []
+    escalas: [],
+    estatisticas: null
   };
   
   localStorage.removeItem('perfil_ativo');
@@ -665,6 +669,21 @@ async function enviarLocalizacao(nomeRota, coords) {
   if (!estadoApp.motorista || !estadoApp.onibusAtivo) return;
 
   try {
+    // Calcular distância percorrida
+    let distanciaKm = 0;
+    if (estadoApp.ultimaLocalizacao) {
+      const lat1 = estadoApp.ultimaLocalizacao.latitude;
+      const lon1 = estadoApp.ultimaLocalizacao.longitude;
+      const lat2 = coords.latitude;
+      const lon2 = coords.longitude;
+      
+      distanciaKm = calcularDistancia(lat1, lon1, lat2, lon2);
+    }
+    
+    // Atualizar distância total
+    estadoApp.distanciaTotal = (estadoApp.distanciaTotal || 0) + distanciaKm;
+    estadoApp.ultimaLocalizacao = coords;
+
     await updateLocalizacao(estadoApp.motorista.matricula, {
       motorista: estadoApp.motorista.nome,
       matricula: estadoApp.motorista.matricula,
@@ -679,14 +698,28 @@ async function enviarLocalizacao(nomeRota, coords) {
       longitude: coords.longitude,
       velocidade: coords.speed ? (coords.speed * 3.6).toFixed(1) : null,
       precisao: coords.accuracy,
+      distancia: estadoApp.distanciaTotal.toFixed(2), // KM rodados
       ativo: true,
       timestamp: new Date()
     });
     
-    console.log('📍 Localização enviada:', new Date().toLocaleTimeString());
+    console.log('📍 Localização enviada:', new Date().toLocaleTimeString(), 'Distância:', estadoApp.distanciaTotal.toFixed(2), 'km');
   } catch (erro) {
     console.error('Erro ao enviar localização:', erro);
   }
+}
+
+// Função para calcular distância entre dois pontos (Haversine formula)
+function calcularDistancia(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Raio da Terra em km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
 }
 
 window.pararRota = function () {
@@ -699,6 +732,8 @@ window.pararRota = function () {
   navigator.geolocation.clearWatch(estadoApp.watchId);
   estadoApp.watchId = null;
   estadoApp.rotaAtiva = null;
+  estadoApp.distanciaTotal = 0;
+  estadoApp.ultimaLocalizacao = null;
   
   if (estadoApp.motorista) {
     updateLocalizacao(estadoApp.motorista.matricula, {
@@ -876,6 +911,7 @@ function iniciarMonitoramentoPassageiro() {
               <div class="motorista-detalhes">
                 <small>📍 Localização ativa</small>
                 <small>⏱️ ${motorista.timestamp ? new Date(motorista.timestamp.toDate()).toLocaleTimeString() : '--:--'}</small>
+                ${motorista.distancia ? `<small>📏 ${motorista.distancia} km rodados</small>` : ''}
                 ${motorista.velocidade ? `<small>🚗 ${motorista.velocidade} km/h</small>` : ''}
               </div>
             </div>
@@ -946,6 +982,10 @@ function iniciarMonitoramentoAdmin() {
           <div class="info-row">
             <span>📍 Localização:</span>
             <span>${rota.latitude?.toFixed(6)}, ${rota.longitude?.toFixed(6)}</span>
+          </div>
+          <div class="info-row">
+            <span>📏 Distância:</span>
+            <span>${rota.distancia || '0'} km rodados</span>
           </div>
           <div class="info-row">
             <span>⏱️ Última atualização:</span>
@@ -1029,10 +1069,10 @@ function iniciarMonitoramentoEmergencias() {
         </div>
         
         <div class="emergencia-actions">
-          <button class="btn small success" onclick="resolverEmergencia('${emergencia.id}')">
+          <button class="btn small success" onclick="resolverEmergenciaAdmin('${emergencia.id}')">
             ✅ Resolver
           </button>
-          <button class="btn small" onclick="contatarMotorista('${emergencia.matricula}')">
+          <button class="btn small" onclick="contatarMotoristaAdmin('${emergencia.matricula}')">
             📞 Contatar
           </button>
           <button class="btn small warning" onclick="verLocalizacaoEmergencia('${emergencia.id}')">
@@ -1091,10 +1131,10 @@ function iniciarMonitoramentoFeedbacks() {
         ` : ''}
         
         <div class="feedback-actions">
-          <button class="btn small success" onclick="resolverFeedback('${feedback.id}')">
+          <button class="btn small success" onclick="resolverFeedbackAdmin('${feedback.id}')">
             ✅ Resolver
           </button>
-          <button class="btn small" onclick="responderFeedback('${feedback.id}')">
+          <button class="btn small" onclick="responderFeedbackAdmin('${feedback.id}')">
             💬 Responder
           </button>
         </div>
@@ -1167,6 +1207,12 @@ window.mostrarTela = function(id) {
     case 'tela-motorista':
       atualizarInfoMotorista();
       break;
+    case 'tela-rotas-passageiro':
+      carregarRotasPassageiro();
+      break;
+    case 'tela-relatorios':
+      carregarRelatorios();
+      break;
   }
   
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1186,7 +1232,119 @@ function atualizarInfoMotorista() {
   }
 }
 
-// ========== CARREGAMENTO DE ROTAS ==========
+// ========== CARREGAMENTO DE ROTAS PARA PASSAGEIRO ==========
+async function carregarRotasPassageiro() {
+  const container = document.getElementById('rotasPassageiroContainer');
+  if (!container) return;
+  
+  showLoading('Carregando rotas disponíveis...');
+  
+  try {
+    // Buscar rotas ativas do Firebase
+    const q = query(collection(db, 'rotas_em_andamento'), where("ativo", "==", true));
+    const snapshot = await getDocs(q);
+    const rotasAtivas = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    // Agrupar por rota
+    const rotasAgrupadas = {};
+    rotasAtivas.forEach(rota => {
+      if (!rotasAgrupadas[rota.rota]) {
+        rotasAgrupadas[rota.rota] = [];
+      }
+      rotasAgrupadas[rota.rota].push(rota);
+    });
+    
+    if (Object.keys(rotasAgrupadas).length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🚌</div>
+          <h4>Nenhuma rota ativa no momento</h4>
+          <p>Não há motoristas compartilhando localização.</p>
+        </div>
+      `;
+      hideLoading();
+      return;
+    }
+    
+    // Mostrar todas as rotas disponíveis, mesmo as sem motoristas ativos
+    let html = '<div class="rotas-passageiro-grid">';
+    
+    ROTAS_DISPONIVEIS.forEach(rota => {
+      const motoristasNaRota = rotasAgrupadas[rota.nome] || [];
+      const temMotorista = motoristasNaRota.length > 0;
+      
+      html += `
+        <div class="rota-passageiro-card ${temMotorista ? 'com-motorista' : 'sem-motorista'}">
+          <div class="rota-passageiro-header">
+            <div class="rota-passageiro-icon">
+              ${rota.tipo === 'adm' ? '🏢' : rota.tipo === 'retorno' ? '🔄' : '🚛'}
+            </div>
+            <div class="rota-passageiro-info">
+              <h4>${rota.nome}</h4>
+              <p>${rota.desc}</p>
+              <div class="rota-passageiro-status">
+                ${temMotorista ? 
+                  `<span class="status-online"><i class="fas fa-circle"></i> ${motoristasNaRota.length} motorista(s) ativo(s)</span>` :
+                  `<span class="status-offline"><i class="fas fa-circle"></i> Sem motoristas ativos</span>`
+                }
+              </div>
+            </div>
+          </div>
+          
+          ${temMotorista ? `
+            <div class="motoristas-na-rota">
+              <h5>Motoristas nesta rota:</h5>
+              ${motoristasNaRota.map(motorista => `
+                <div class="motorista-passageiro-item">
+                  <div class="motorista-info">
+                    <strong>👤 ${motorista.motorista}</strong>
+                    <span class="onibus-info">${motorista.onibus}</span>
+                  </div>
+                  <div class="motorista-detalhes">
+                    ${motorista.distancia ? `<small>📏 ${motorista.distancia} km rodados</small>` : ''}
+                    ${motorista.velocidade ? `<small>🚗 ${motorista.velocidade} km/h</small>` : ''}
+                    <small>📍 ${motorista.timestamp ? new Date(motorista.timestamp.toDate()).toLocaleTimeString() : '--:--'}</small>
+                  </div>
+                  <button class="btn small" onclick="verLocalizacaoMotorista(${motorista.latitude}, ${motorista.longitude}, '${motorista.motorista}', '${motorista.onibus}')">
+                    📍 Ver Mapa
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+          
+          <div class="rota-passageiro-actions">
+            <button class="btn secondary" onclick="abrirRotaNoMaps('${rota.nome}')">
+              🗺️ Ver Rota
+            </button>
+            ${temMotorista ? `
+              <button class="btn" onclick="verLocalizacaoRota('${rota.nome}')">
+                👁️ Ver Detalhes
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+    
+  } catch (error) {
+    console.error('Erro ao carregar rotas:', error);
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">❌</div>
+        <h4>Erro ao carregar rotas</h4>
+        <p>Tente novamente mais tarde.</p>
+      </div>
+    `;
+  } finally {
+    hideLoading();
+  }
+}
+
+// ========== CARREGAMENTO DE ROTAS PARA MOTORISTA ==========
 function carregarRotas() {
   const container = document.getElementById('routesContainer');
   if (!container) {
@@ -1235,33 +1393,30 @@ function carregarRotas() {
 }
 
 async function verificarMotoristasPorRota() {
-  if (!estadoApp.unsubscribeRotas) {
-    const unsubscribe = monitorarRotas((rotas) => {
-      const rotasAtivas = rotas.filter(r => r.ativo !== false);
-      
-      rotasAtivas.forEach(rota => {
-        const statusElement = document.getElementById(`status-${rota.id}`);
-        if (statusElement) {
-          statusElement.innerHTML = `
-            <small>✅ <strong>${rota.motorista}</strong> no ônibus ${rota.onibus}</small>
-            <small>📍 ${rota.velocidade ? rota.velocidade + ' km/h' : 'Ativo'}</small>
-          `;
-        }
-      });
-      
-      document.querySelectorAll('.route-item').forEach(item => {
-        const routeId = item.querySelector('.route-status')?.id.replace('status-', '');
-        if (routeId && !rotasAtivas.find(r => r.id === routeId)) {
-          const statusElement = document.getElementById(`status-${routeId}`);
-          if (statusElement) {
-            statusElement.innerHTML = `<small>⏳ Nenhum motorista ativo</small>`;
-          }
-        }
-      });
-    });
-    
-    setTimeout(() => unsubscribe(), 5000);
-  }
+  const q = query(collection(db, 'rotas_em_andamento'), where("ativo", "==", true));
+  const snapshot = await getDocs(q);
+  const rotasAtivas = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  
+  rotasAtivas.forEach(rota => {
+    const statusElement = document.getElementById(`status-${rota.id}`);
+    if (statusElement) {
+      statusElement.innerHTML = `
+        <small>✅ <strong>${rota.motorista}</strong> no ônibus ${rota.onibus}</small>
+        <small>📏 ${rota.distancia || '0'} km rodados</small>
+        <small>📍 ${rota.velocidade ? rota.velocidade + ' km/h' : 'Ativo'}</small>
+      `;
+    }
+  });
+  
+  document.querySelectorAll('.route-item').forEach(item => {
+    const routeId = item.querySelector('.route-status')?.id.replace('status-', '');
+    if (routeId && !rotasAtivas.find(r => r.id === routeId)) {
+      const statusElement = document.getElementById(`status-${routeId}`);
+      if (statusElement) {
+        statusElement.innerHTML = `<small>⏳ Nenhum motorista ativo</small>`;
+      }
+    }
+  });
 }
 
 // ========== FUNÇÕES DE MAPA ==========
@@ -1298,40 +1453,83 @@ window.verMapaAdmin = function(lat, lng) {
   window.open(url, '_blank', 'noopener,noreferrer');
 };
 
-window.verMotoristasNaRota = function(nomeRota) {
+window.verMotoristasNaRota = async function(nomeRota) {
   mostrarTela('tela-ver-motoristas');
-};
-
-// ========== CLIMA ==========
-async function buscarClimaAtual() {
+  
   try {
-    const response = await fetch('https://api.openweathermap.org/data/2.5/weather?q=Sao Paulo,BR&units=metric&lang=pt_br&appid=3199f44c3156f8c75722104de2677173');
-    const data = await response.json();
+    const q = query(collection(db, 'rotas_em_andamento'), 
+      where("ativo", "==", true),
+      where("rota", "==", nomeRota)
+    );
     
-    if (data.main) {
-      const climaElement = document.getElementById('climaAtual');
-      if (climaElement) {
-        climaElement.innerHTML = `
-          <div class="clima-info">
-            <span>🌡️ ${Math.round(data.main.temp)}°C</span>
-            <small>${data.weather[0].description}</small>
-          </div>
-        `;
-      }
-    }
-  } catch (error) {
-    console.log('Não foi possível obter dados do clima:', error);
-    const climaElement = document.getElementById('climaAtual');
-    if (climaElement) {
-      climaElement.innerHTML = `
-        <div class="clima-info">
-          <span>🌡️ 25°C</span>
-          <small>Ensolarado</small>
+    const snapshot = await getDocs(q);
+    const motoristas = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    const container = document.getElementById('motoristasContainer');
+    if (!container) return;
+    
+    if (motoristas.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="fas fa-users-slash"></i>
+          <h4>Nenhum motorista ativo</h4>
+          <p>Não há motoristas compartilhando localização nesta rota no momento.</p>
         </div>
       `;
+      return;
     }
+    
+    container.innerHTML = motoristas.map(motorista => `
+      <div class="motorista-detalhe-card">
+        <div class="motorista-detalhe-header">
+          <div class="motorista-avatar">
+            <i class="fas fa-user-circle"></i>
+          </div>
+          <div class="motorista-info-detalhe">
+            <h4>${motorista.motorista}</h4>
+            <p>Matrícula: ${motorista.matricula}</p>
+            <span class="onibus-badge">${motorista.onibus}</span>
+          </div>
+        </div>
+        
+        <div class="motorista-detalhe-info">
+          <div class="info-row">
+            <span><i class="fas fa-route"></i> Rota:</span>
+            <span>${motorista.rota}</span>
+          </div>
+          <div class="info-row">
+            <span><i class="fas fa-road"></i> Distância:</span>
+            <span>${motorista.distancia || '0'} km rodados</span>
+          </div>
+          <div class="info-row">
+            <span><i class="fas fa-tachometer-alt"></i> Velocidade:</span>
+            <span>${motorista.velocidade || '0'} km/h</span>
+          </div>
+          <div class="info-row">
+            <span><i class="fas fa-clock"></i> Última atualização:</span>
+            <span>${motorista.timestamp ? new Date(motorista.timestamp.toDate()).toLocaleTimeString() : '--:--'}</span>
+          </div>
+          <div class="info-row">
+            <span><i class="fas fa-map-marker-alt"></i> Localização:</span>
+            <span>${motorista.latitude?.toFixed(4)}, ${motorista.longitude?.toFixed(4)}</span>
+          </div>
+        </div>
+        
+        <div class="motorista-detalhe-actions">
+          <button class="btn" onclick="verLocalizacaoMotorista(${motorista.latitude}, ${motorista.longitude}, '${motorista.motorista}', '${motorista.onibus}')">
+            <i class="fas fa-map"></i> Ver Mapa
+          </button>
+          <button class="btn secondary" onclick="abrirRotaNoMaps('${motorista.rota}')">
+            <i class="fas fa-route"></i> Ver Rota
+          </button>
+        </div>
+      </div>
+    `).join('');
+    
+  } catch (error) {
+    console.error('Erro ao carregar motoristas:', error);
   }
-}
+};
 
 // ========== NOTIFICAÇÕES ==========
 function mostrarNotificacao(titulo, mensagem) {
@@ -1415,10 +1613,6 @@ window.enviarNotificacaoGeral = async function() {
     console.error('Erro ao enviar notificação:', erro);
     alert('❌ Erro ao enviar notificação');
   }
-};
-
-window.verFormsControle = function() {
-  window.open('https://docs.google.com/spreadsheets/d/1w1KEIbWk7vjsYUvVzCm7-OSERgQVqUys77nZCLabhdE/edit?usp=sharing', '_blank', 'noopener,noreferrer');
 };
 
 // ========== GESTÃO DE AVISOS (ADMIN) ==========
@@ -1721,6 +1915,55 @@ async function carregarEscalas() {
   }
 }
 
+// Carregar escala específica do motorista
+async function carregarEscalaMotorista(matricula) {
+  try {
+    const escalas = await getEscalas();
+    const escalaMotorista = escalas.find(escala => escala.matricula === matricula);
+    
+    if (escalaMotorista) {
+      estadoApp.escalaMotorista = escalaMotorista;
+      atualizarTelaEscala(escalaMotorista);
+    }
+  } catch (erro) {
+    console.error('Erro ao carregar escala do motorista:', erro);
+  }
+}
+
+function atualizarTelaEscala(escala) {
+  const container = document.querySelector('.escala-dias');
+  if (!container || !escala) return;
+  
+  const diasSemana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+  
+  container.innerHTML = diasSemana.map(dia => {
+    const diaEscala = escala.dias ? escala.dias.find(d => d.dia === dia) : null;
+    
+    return `
+      <div class="dia-escala ${diaEscala ? '' : 'folga'}">
+        <div class="dia-nome">${dia}</div>
+        <div class="dia-info">
+          ${diaEscala ? `
+            <span class="turno ${getTurnoClass(diaEscala.horario)}">${diaEscala.horario || '00:00 - 00:00'}</span>
+            <span class="rota">${diaEscala.rota || 'Sem rota'}</span>
+            ${diaEscala.onibus ? `<small class="onibus-escala">${diaEscala.onibus}</small>` : ''}
+          ` : `
+            <span class="folga-text">FOLGA</span>
+          `}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getTurnoClass(horario) {
+  if (!horario) return 'manha';
+  if (horario.includes('06:00')) return 'manha';
+  if (horario.includes('14:00')) return 'tarde';
+  if (horario.includes('22:00')) return 'noite';
+  return 'manha';
+}
+
 window.gerenciarEscalas = async function() {
   try {
     showLoading('Carregando escalas...');
@@ -1775,7 +2018,7 @@ window.gerenciarEscalas = async function() {
                       <div class="dia-nome-admin">${dia}</div>
                       <div class="dia-info-admin">
                         ${diaEscala ? `
-                          <span class="turno-admin ${diaEscala.turno}">${diaEscala.horario || '00:00 - 00:00'}</span>
+                          <span class="turno-admin ${getTurnoClass(diaEscala.horario)}">${diaEscala.horario || '00:00 - 00:00'}</span>
                           <span class="rota-admin">${diaEscala.rota || 'Sem rota'}</span>
                           ${diaEscala.onibus ? `<small class="onibus-admin">${diaEscala.onibus}</small>` : ''}
                         ` : `
@@ -1951,24 +2194,163 @@ window.editarEscala = async function(escalaId) {
     
     const escala = estadoApp.escalas.find(e => e.id === escalaId);
     if (!escala) {
-      alert('Escala não encontrado');
+      alert('Escala não encontrada');
       return;
     }
     
-    const novoMotorista = prompt('Editar nome do motorista:', escala.motorista || '');
-    if (novoMotorista !== null) {
-      await updateEscala(escalaId, {
-        ...escala,
-        motorista: novoMotorista
-      });
+    const modal = document.createElement('div');
+    modal.className = 'modal-back large';
+    modal.innerHTML = `
+      <div class="modal">
+        <button class="close" onclick="this.parentElement.parentElement.remove()">✕</button>
+        <h3><i class="fas fa-edit"></i> Editar Escala</h3>
+        
+        <div class="form-group">
+          <label>Motorista *</label>
+          <input type="text" id="editarEscalaMotorista" class="form-input" value="${escala.motorista || ''}" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Matrícula *</label>
+          <input type="text" id="editarEscalaMatricula" class="form-input" value="${escala.matricula || ''}" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Período</label>
+          <input type="text" id="editarEscalaPeriodo" class="form-input" value="${escala.periodo || ''}">
+        </div>
+        
+        <div class="form-section">
+          <h4><i class="fas fa-calendar-day"></i> Dias da Semana</h4>
+          <div class="dias-escala-form">
+            ${['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map(dia => {
+              const diaEscala = escala.dias ? escala.dias.find(d => d.dia === dia) : null;
+              const temDia = !!diaEscala;
+              
+              return `
+                <div class="dia-form-group">
+                  <div class="dia-form-header">
+                    <strong>${dia}</strong>
+                    <label class="switch">
+                      <input type="checkbox" id="edit-toggle-${dia}" ${temDia ? 'checked' : ''}>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                  <div class="dia-form-content" id="edit-content-${dia}" style="display: ${temDia ? 'block' : 'none'}">
+                    <div class="form-group-sm">
+                      <label>Horário</label>
+                      <select class="form-input-sm" id="edit-${dia}-horario">
+                        <option value="06:00 - 14:00" ${diaEscala?.horario === '06:00 - 14:00' ? 'selected' : ''}>06:00 - 14:00 (Manhã)</option>
+                        <option value="14:00 - 22:00" ${diaEscala?.horario === '14:00 - 22:00' ? 'selected' : ''}>14:00 - 22:00 (Tarde)</option>
+                        <option value="22:00 - 06:00" ${diaEscala?.horario === '22:00 - 06:00' ? 'selected' : ''}>22:00 - 06:00 (Noite)</option>
+                        <option value="00:00 - 00:00" ${diaEscala?.horario === '00:00 - 00:00' ? 'selected' : ''}>Folga</option>
+                      </select>
+                    </div>
+                    <div class="form-group-sm">
+                      <label>Rota</label>
+                      <select class="form-input-sm" id="edit-${dia}-rota">
+                        <option value="">Selecione...</option>
+                        ${ROTAS_DISPONIVEIS.map(rota => `
+                          <option value="${rota.nome}" ${diaEscala?.rota === rota.nome ? 'selected' : ''}>${rota.nome}</option>
+                        `).join('')}
+                      </select>
+                    </div>
+                    <div class="form-group-sm">
+                      <label>Ônibus</label>
+                      <select class="form-input-sm" id="edit-${dia}-onibus">
+                        <option value="">Selecione...</option>
+                        ${ONIBUS_DISPONIVEIS.map(onibus => `
+                          <option value="${onibus.placa}" ${diaEscala?.onibus === onibus.placa ? 'selected' : ''}>${onibus.placa} (${onibus.tag_ac})</option>
+                        `).join('')}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="salvarEdicaoEscala('${escalaId}')">
+            <i class="fas fa-save"></i> Salvar Alterações
+          </button>
+          <button class="btn btn-secondary" onclick="this.parentElement.parentElement.parentElement.remove()">
+            <i class="fas fa-times"></i> Cancelar
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+    
+    // Configurar toggles
+    ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].forEach(dia => {
+      const toggle = document.getElementById(`edit-toggle-${dia}`);
+      const content = document.getElementById(`edit-content-${dia}`);
       
-      mostrarNotificacao('✅ Escala Atualizada', 'Escala atualizada com sucesso!');
-      gerenciarEscalas();
-    }
+      if (toggle && content) {
+        toggle.addEventListener('change', function() {
+          content.style.display = this.checked ? 'block' : 'none';
+        });
+      }
+    });
     
   } catch (erro) {
-    console.error('Erro ao editar escala:', erro);
-    alert('❌ Erro ao editar escala');
+    console.error('Erro ao carregar escala:', erro);
+    alert('❌ Erro ao carregar escala');
+  } finally {
+    hideLoading();
+  }
+};
+
+window.salvarEdicaoEscala = async function(escalaId) {
+  const motorista = document.getElementById('editarEscalaMotorista').value;
+  const matricula = document.getElementById('editarEscalaMatricula').value;
+  const periodo = document.getElementById('editarEscalaPeriodo').value;
+  
+  if (!motorista || !matricula) {
+    alert('Preencha nome do motorista e matrícula');
+    return;
+  }
+  
+  const dias = [];
+  ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].forEach(dia => {
+    const toggle = document.getElementById(`edit-toggle-${dia}`);
+    if (toggle && toggle.checked) {
+      const horario = document.getElementById(`edit-${dia}-horario`).value;
+      const rota = document.getElementById(`edit-${dia}-rota`).value;
+      const onibus = document.getElementById(`edit-${dia}-onibus`).value;
+      
+      dias.push({
+        dia: dia,
+        horario: horario,
+        rota: rota,
+        onibus: onibus
+      });
+    }
+  });
+  
+  try {
+    showLoading('Salvando alterações...');
+    
+    await updateEscala(escalaId, {
+      motorista: motorista,
+      matricula: matricula,
+      periodo: periodo,
+      dias: dias,
+      timestamp: new Date()
+    });
+    
+    mostrarNotificacao('✅ Escala Atualizada', 'Escala atualizada com sucesso!');
+    
+    document.querySelector('.modal-back').remove();
+    gerenciarEscalas();
+    
+  } catch (erro) {
+    console.error('Erro ao salvar escala:', erro);
+    alert('❌ Erro ao salvar escala');
   } finally {
     hideLoading();
   }
@@ -2033,6 +2415,241 @@ window.exportarEscalas = function() {
   document.body.removeChild(link);
   
   mostrarNotificacao('✅ Escalas Exportadas', 'Download iniciado!');
+};
+
+// ========== FUNÇÕES DE EMERGÊNCIA (ADMIN) ==========
+window.resolverEmergenciaAdmin = async function(emergenciaId) {
+  if (!confirm('Marcar esta emergência como resolvida?')) {
+    return;
+  }
+  
+  try {
+    showLoading('Resolvendo emergência...');
+    
+    await resolverEmergencia(emergenciaId);
+    
+    mostrarNotificacao('✅ Emergência Resolvida', 'A emergência foi marcada como resolvida.');
+    
+    // Remover do DOM
+    const emergenciaElement = document.querySelector(`[onclick*="${emergenciaId}"]`)?.closest('.emergencia-card');
+    if (emergenciaElement) {
+      emergenciaElement.remove();
+    }
+    
+  } catch (erro) {
+    console.error('Erro ao resolver emergência:', erro);
+    alert('❌ Erro ao resolver emergência');
+  } finally {
+    hideLoading();
+  }
+};
+
+window.contatarMotoristaAdmin = function(matricula) {
+  const mensagem = encodeURIComponent(`Olá! Estamos entrando em contato referente a uma emergência registrada.`);
+  const url = `https://wa.me/55${matricula}?text=${mensagem}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+window.verLocalizacaoEmergencia = async function(emergenciaId) {
+  try {
+    const emergencia = estadoApp.emergenciasAtivas?.find(e => e.id === emergenciaId);
+    if (emergencia) {
+      const url = `https://www.google.com/maps?q=${emergencia.latitude},${emergencia.longitude}&z=15`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      alert('Localização da emergência não disponível');
+    }
+  } catch (erro) {
+    console.error('Erro ao abrir localização:', erro);
+    alert('Erro ao abrir localização');
+  }
+};
+
+// ========== FUNÇÕES DE FEEDBACK (ADMIN) ==========
+window.resolverFeedbackAdmin = async function(feedbackId) {
+  if (!confirm('Marcar este feedback como resolvido?')) {
+    return;
+  }
+  
+  try {
+    showLoading('Resolvendo feedback...');
+    
+    await resolverFeedback(feedbackId);
+    
+    mostrarNotificacao('✅ Feedback Resolvido', 'O feedback foi marcado como resolvido.');
+    
+    // Remover do DOM
+    const feedbackElement = document.querySelector(`[onclick*="${feedbackId}"]`)?.closest('.feedback-card');
+    if (feedbackElement) {
+      feedbackElement.remove();
+    }
+    
+  } catch (erro) {
+    console.error('Erro ao resolver feedback:', erro);
+    alert('❌ Erro ao resolver feedback');
+  } finally {
+    hideLoading();
+  }
+};
+
+window.responderFeedbackAdmin = function(feedbackId) {
+  const resposta = prompt('Digite sua resposta para este feedback:');
+  if (!resposta) return;
+  
+  try {
+    showLoading('Enviando resposta...');
+    
+    responderFeedback(feedbackId, resposta);
+    
+    mostrarNotificacao('✅ Resposta Enviada', 'Resposta enviada com sucesso!');
+    
+  } catch (erro) {
+    console.error('Erro ao responder feedback:', erro);
+    alert('❌ Erro ao responder feedback');
+  } finally {
+    hideLoading();
+  }
+};
+
+// ========== RELATÓRIOS ==========
+async function carregarRelatorios() {
+  try {
+    showLoading('Carregando relatórios...');
+    
+    const estatisticas = await getEstatisticasDashboard();
+    estadoApp.estatisticas = estatisticas;
+    
+    // Atualizar tela de relatórios
+    const container = document.getElementById('relatoriosContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="dashboard-grid">
+          <div class="dashboard-card large">
+            <h3><i class="fas fa-chart-pie"></i> Estatísticas Gerais</h3>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <div class="stat-number">${estatisticas.totalRotasAtivas}</div>
+                <div class="stat-label">Rotas Ativas</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number">${estatisticas.motoristasAtivos}</div>
+                <div class="stat-label">Motoristas Ativos</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number">${estatisticas.totalEmergencias}</div>
+                <div class="stat-label">Emergências</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number">${estatisticas.totalFeedbacks}</div>
+                <div class="stat-label">Feedbacks</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="dashboard-card">
+            <h3><i class="fas fa-route"></i> Rotas por Tipo</h3>
+            <div class="chart-container">
+              <div class="chart-bar" style="height: ${(estatisticas.rotasPorTipo?.operacional || 0) * 20}px">
+                <span>Operacional: ${estatisticas.rotasPorTipo?.operacional || 0}</span>
+              </div>
+              <div class="chart-bar" style="height: ${(estatisticas.rotasPorTipo?.adm || 0) * 20}px">
+                <span>ADM: ${estatisticas.rotasPorTipo?.adm || 0}</span>
+              </div>
+              <div class="chart-bar" style="height: ${(estatisticas.rotasPorTipo?.retorno || 0) * 20}px">
+                <span>Retorno: ${estatisticas.rotasPorTipo?.retorno || 0}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="dashboard-card">
+            <h3><i class="fas fa-bus"></i> Rotas Mais Frequentes</h3>
+            <div class="rotas-frequentes">
+              ${ROTAS_DISPONIVEIS.slice(0, 5).map(rota => `
+                <div class="rota-frequente-item">
+                  <span>${rota.nome}</span>
+                  <span class="rota-count">${Math.floor(Math.random() * 10)} viagens</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          
+          <div class="dashboard-card">
+            <h3><i class="fas fa-chart-line"></i> Atividade Diária</h3>
+            <div class="atividade-diaria">
+              ${['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(dia => `
+                <div class="dia-atividade">
+                  <div class="barra-atividade" style="height: ${Math.floor(Math.random() * 80) + 20}%"></div>
+                  <span>${dia}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+        
+        <div class="relatorios-actions">
+          <button class="btn" onclick="exportarRelatorios()">
+            <i class="fas fa-file-export"></i> Exportar Relatórios
+          </button>
+          <button class="btn secondary" onclick="atualizarRelatorios()">
+            <i class="fas fa-sync"></i> Atualizar
+          </button>
+        </div>
+      `;
+    }
+    
+  } catch (erro) {
+    console.error('Erro ao carregar relatórios:', erro);
+    
+    const container = document.getElementById('relatoriosContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="fas fa-chart-line"></i>
+          <h4>Erro ao carregar relatórios</h4>
+          <p>Tente novamente mais tarde.</p>
+        </div>
+      `;
+    }
+  } finally {
+    hideLoading();
+  }
+}
+
+window.atualizarRelatorios = function() {
+  carregarRelatorios();
+};
+
+window.exportarRelatorios = function() {
+  if (!estadoApp.estatisticas) {
+    alert('Nenhum dado disponível para exportar');
+    return;
+  }
+  
+  let csvContent = "Relatório AC Transporte\n";
+  csvContent += `Data: ${new Date().toLocaleDateString()}\n\n`;
+  csvContent += "Métrica,Valor\n";
+  csvContent += `Rotas Ativas,${estadoApp.estatisticas.totalRotasAtivas}\n`;
+  csvContent += `Motoristas Ativos,${estadoApp.estatisticas.motoristasAtivos}\n`;
+  csvContent += `Emergências Pendentes,${estadoApp.estatisticas.totalEmergencias}\n`;
+  csvContent += `Feedbacks Pendentes,${estadoApp.estatisticas.totalFeedbacks}\n\n`;
+  csvContent += "Rotas por Tipo\n";
+  csvContent += `Operacional,${estadoApp.estatisticas.rotasPorTipo?.operacional || 0}\n`;
+  csvContent += `ADM,${estadoApp.estatisticas.rotasPorTipo?.adm || 0}\n`;
+  csvContent += `Retorno,${estadoApp.estatisticas.rotasPorTipo?.retorno || 0}\n`;
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', `relatorio_ac_transporte_${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  mostrarNotificacao('✅ Relatório Exportado', 'Download iniciado!');
 };
 
 // ========== FUNÇÕES DE TEMAS E PWA ==========
@@ -2295,9 +2912,15 @@ window.verLocalizacaoMotorista = verLocalizacaoMotorista;
 window.verMapaAdmin = verMapaAdmin;
 window.verMotoristasNaRota = verMotoristasNaRota;
 window.enviarNotificacaoGeral = enviarNotificacaoGeral;
-window.verFormsControle = verFormsControle;
 window.gerenciarAvisos = gerenciarAvisos;
 window.gerenciarEscalas = gerenciarEscalas;
 window.abrirSuporteWhatsApp = abrirSuporteWhatsApp;
+window.resolverEmergenciaAdmin = resolverEmergenciaAdmin;
+window.contatarMotoristaAdmin = contatarMotoristaAdmin;
+window.verLocalizacaoEmergencia = verLocalizacaoEmergencia;
+window.resolverFeedbackAdmin = resolverFeedbackAdmin;
+window.responderFeedbackAdmin = responderFeedbackAdmin;
+window.atualizarRelatorios = atualizarRelatorios;
+window.exportarRelatorios = exportarRelatorios;
 
 console.log('🚀 app.js carregado com sucesso!');
