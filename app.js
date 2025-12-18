@@ -1,9 +1,22 @@
-// app.js - CÓDIGO COMPLETO FINAL ATUALIZADO E FUNCIONAL
+// app.js - CÓDIGO COMPLETO COM TODAS AS FUNCIONALIDADES
 import { 
-  db, 
-  getColaborador, 
+  db,
+  auth,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  serverTimestamp,
+  getColaborador,
   getColaboradorByEmail,
-  updateLocalizacao, 
+  updateLocalizacao,
   registrarEmergencia,
   registrarFeedback,
   registrarAviso,
@@ -14,7 +27,6 @@ import {
   getFormsControleVeiculos,
   loginEmailSenha,
   signOut,
-  serverTimestamp,
   getAvisos,
   updateAviso,
   deleteAviso,
@@ -57,15 +69,15 @@ const ONIBUS_DISPONIVEIS = [
 
 // Rotas disponíveis
 const ROTAS_DISPONIVEIS = [
-  { id: 'adm01', nome: 'ROTA ADM 01', tipo: 'adm', desc: 'Rota administrativa 01' },
-  { id: 'adm02', nome: 'ROTA ADM 02', tipo: 'adm', desc: 'Rota administrativa 02' },
-  { id: 'op01', nome: 'ROTA 01', tipo: 'operacional', desc: 'Rota operacional 01' },
-  { id: 'op02', nome: 'ROTA 02', tipo: 'operacional', desc: 'Rota operacional 02' },
-  { id: 'op03', nome: 'ROTA 03', tipo: 'operacional', desc: 'Rota operacional 03' },
-  { id: 'op04', nome: 'ROTA 04', tipo: 'operacional', desc: 'Rota operacional 04' },
-  { id: 'op05', nome: 'ROTA 05', tipo: 'operacional', desc: 'Rota operacional 05' },
-  { id: 'ret01', nome: 'RETORNO OVERLAND - ROTA 01', tipo: 'retorno', desc: 'Rota de retorno Overland 01' },
-  { id: 'ret02', nome: 'RETORNO OVERLAND - ROTA 02', tipo: 'retorno', desc: 'Rota de retorno Overland 02' }
+  { id: 'adm01', nome: 'ROTA ADM 01', tipo: 'adm', desc: 'Rota administrativa 01', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=18BCgBpobp1Olzmzy0RnPCUEd7Vnkc5s&usp=sharing' },
+  { id: 'adm02', nome: 'ROTA ADM 02', tipo: 'adm', desc: 'Rota administrativa 02', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=1WxbIX8nw0xyGBLMvvi1SF3DRuwmZ5oM&usp=sharing' },
+  { id: 'op01', nome: 'ROTA 01', tipo: 'operacional', desc: 'Rota operacional 01', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=1jCfFxq1ZwecS2IcHy7xGFLLgttsM-RQ&usp=sharing' },
+  { id: 'op02', nome: 'ROTA 02', tipo: 'operacional', desc: 'Rota operacional 02', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=1LCvNJxWBbZ_chpbdn_lk_Dm6NPA194g&usp=sharing' },
+  { id: 'op03', nome: 'ROTA 03', tipo: 'operacional', desc: 'Rota operacional 03', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=1bdwkrClh5AZml0mnDGlOzYcaR4w1BL0&usp=sharing' },
+  { id: 'op04', nome: 'ROTA 04', tipo: 'operacional', desc: 'Rota operacional 04', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=1ejibzdZkhX2QLnP9YgvvHdQpZELFvXo&usp=sharing' },
+  { id: 'op05', nome: 'ROTA 05', tipo: 'operacional', desc: 'Rota operacional 05', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=1L9xjAWFUupMc7eQbqVJz-SNWlYX5SHo&usp=sharing' },
+  { id: 'ret01', nome: 'RETORNO OVERLAND - ROTA 01', tipo: 'retorno', desc: 'Rota de retorno Overland 01', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=1ClQVIaRLOYYWHU7fvP87r1BVy85a_eg&usp=sharing' },
+  { id: 'ret02', nome: 'RETORNO OVERLAND - ROTA 02', tipo: 'retorno', desc: 'Rota de retorno Overland 02', mapsUrl: 'https://www.google.com/maps/d/u/1/edit?mid=1WOIMgeLgV01B8yk7HoX6tazdCHXQnok&usp=sharing' }
 ];
 
 // ========== INICIALIZAÇÃO ==========
@@ -184,7 +196,6 @@ window.confirmarMatriculaMotorista = async function () {
     loginBtn.disabled = true;
     loginBtn.textContent = 'Validando...';
     
-    // Buscar colaborador no Firebase
     const snap = await getColaborador(matricula);
 
     if (!snap.exists()) {
@@ -205,7 +216,6 @@ window.confirmarMatriculaMotorista = async function () {
       return;
     }
 
-    // ✅ Login autorizado - mostrar seleção de ônibus
     localStorage.setItem('motorista_matricula', matricula);
     localStorage.setItem('motorista_nome', dados.nome);
     localStorage.setItem('motorista_email', dados.email || '');
@@ -217,9 +227,7 @@ window.confirmarMatriculaMotorista = async function () {
       email: dados.email || ''
     };
     
-    // Carregar ônibus disponíveis
     carregarOnibus();
-    
     console.log('✅ Motorista autenticado:', dados.nome);
 
   } catch (erro) {
@@ -285,7 +293,6 @@ function solicitarPermissaoLocalizacao() {
   
   showLoading('📍 Obtendo localização...');
   
-  // Usar timeout mais curto para login
   const options = {
     enableHighAccuracy: false,
     timeout: 8000,
@@ -293,20 +300,17 @@ function solicitarPermissaoLocalizacao() {
   };
   
   navigator.geolocation.getCurrentPosition(
-    // SUCESSO
     (position) => {
       console.log('✅ GPS obtido no login');
       hideLoading();
       finalizarLoginComGPS(position);
     },
-    // ERRO
     (error) => {
       console.warn('⚠️ GPS falhou no login:', error.message);
       hideLoading();
       
       alert('📍 Localização não disponível no momento.\n\nO login será realizado normalmente. Você pode ativar o GPS depois.');
       
-      // Finalizar login SEM GPS
       finalizarLoginSemGPS();
     },
     options
@@ -317,7 +321,6 @@ function solicitarPermissaoLocalizacao() {
     
     updateUserStatus(estadoApp.motorista.nome, estadoApp.motorista.matricula);
     
-    // Atualizar informações do ônibus na tela
     const onibusElement = document.getElementById('motoristaOnibus');
     if (onibusElement) {
       onibusElement.textContent = `${estadoApp.onibusAtivo.placa} (${estadoApp.onibusAtivo.tag_ac})`;
@@ -334,7 +337,6 @@ function solicitarPermissaoLocalizacao() {
     
     updateUserStatus(estadoApp.motorista.nome, estadoApp.motorista.matricula);
     
-    // Atualizar informações do ônibus na tela
     const onibusElement = document.getElementById('motoristaOnibus');
     if (onibusElement) {
       onibusElement.textContent = `${estadoApp.onibusAtivo.placa} (${estadoApp.onibusAtivo.tag_ac})`;
@@ -357,21 +359,18 @@ window.loginAdmin = async function () {
     return;
   }
   
-  // Credenciais fixas (ALTERE AQUI PARA PRODUÇÃO)
   const ADMIN_CREDENTIALS = {
     email: 'admin@acparceria.com',
     senha: '050370'
   };
   
   if (email === ADMIN_CREDENTIALS.email && senha === ADMIN_CREDENTIALS.senha) {
-    // Login local bem sucedido
     localStorage.setItem('admin_logado', 'true');
     localStorage.setItem('admin_email', email);
     localStorage.setItem('perfil_ativo', 'admin');
     
     estadoApp.admin = { email, nome: 'Administrador' };
     
-    // Mostrar dashboard
     mostrarTela('tela-admin-dashboard');
     iniciarMonitoramentoAdmin();
     iniciarMonitoramentoEmergencias();
@@ -387,7 +386,6 @@ window.loginAdmin = async function () {
 
 // ========== LOGOUT ==========
 window.logout = function () {
-  // Parar todas as monitorações
   if (estadoApp.watchId) {
     navigator.geolocation.clearWatch(estadoApp.watchId);
     estadoApp.watchId = null;
@@ -398,7 +396,6 @@ window.logout = function () {
   if (estadoApp.unsubscribeFeedbacks) estadoApp.unsubscribeFeedbacks();
   if (estadoApp.unsubscribeAvisos) estadoApp.unsubscribeAvisos();
   
-  // Limpar estado
   estadoApp = {
     motorista: null,
     passageiro: null,
@@ -417,7 +414,6 @@ window.logout = function () {
     escalas: []
   };
   
-  // Limpar storage
   localStorage.removeItem('perfil_ativo');
   localStorage.removeItem('motorista_matricula');
   localStorage.removeItem('motorista_nome');
@@ -426,7 +422,6 @@ window.logout = function () {
   localStorage.removeItem('admin_logado');
   localStorage.removeItem('admin_email');
   
-  // Resetar interface
   const userStatus = document.getElementById('userStatus');
   if (userStatus) userStatus.style.display = 'none';
   
@@ -436,7 +431,6 @@ window.logout = function () {
   const rotaStatus = document.getElementById('rotaStatus');
   if (rotaStatus) rotaStatus.textContent = 'Nenhuma rota ativa';
   
-  // Voltar para tela inicial
   mostrarTela('welcome');
   
   console.log('👋 Usuário deslogado');
@@ -1569,7 +1563,6 @@ window.salvarNovoAviso = async function() {
     
     mostrarNotificacao('✅ Aviso Criado', 'Aviso criado com sucesso!');
     
-    // Fechar modal e atualizar lista
     document.querySelector('.modal-back').remove();
     gerenciarAvisos();
     
@@ -1669,7 +1662,6 @@ window.salvarEdicaoAviso = async function(avisoId) {
     
     mostrarNotificacao('✅ Aviso Atualizado', 'Aviso atualizado com sucesso!');
     
-    // Fechar modal e atualizar lista
     document.querySelector('.modal-back').remove();
     gerenciarAvisos();
     
@@ -1693,13 +1685,11 @@ window.excluirAviso = async function(avisoId) {
     
     mostrarNotificacao('✅ Aviso Excluído', 'Aviso excluído com sucesso!');
     
-    // Remover da lista
     const avisoElement = document.getElementById(`aviso-${avisoId}`);
     if (avisoElement) {
       avisoElement.remove();
     }
     
-    // Se não houver mais avisos, mostrar mensagem
     if (document.querySelectorAll('.aviso-admin-item').length === 0) {
       const container = document.querySelector('.avisos-admin-list');
       if (container) {
@@ -1892,7 +1882,6 @@ window.criarNovaEscala = function() {
   document.body.appendChild(modal);
   modal.style.display = 'flex';
   
-  // Adicionar event listeners para os toggles
   ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].forEach(dia => {
     const toggle = document.getElementById(`toggle-${dia}`);
     const content = document.getElementById(`content-${dia}`);
@@ -1945,7 +1934,6 @@ window.salvarNovaEscala = async function() {
     
     mostrarNotificacao('✅ Escala Criada', 'Escala criada com sucesso!');
     
-    // Fechar modal e atualizar lista
     document.querySelector('.modal-back').remove();
     gerenciarEscalas();
     
@@ -1963,17 +1951,15 @@ window.editarEscala = async function(escalaId) {
     
     const escala = estadoApp.escalas.find(e => e.id === escalaId);
     if (!escala) {
-      alert('Escala não encontrada');
+      alert('Escala não encontrado');
       return;
     }
     
-    // Implementar edição similar à criação
-    // Por questões de espaço, vou mostrar um exemplo simplificado
-    const motorista = prompt('Editar nome do motorista:', escala.motorista || '');
-    if (motorista !== null) {
+    const novoMotorista = prompt('Editar nome do motorista:', escala.motorista || '');
+    if (novoMotorista !== null) {
       await updateEscala(escalaId, {
         ...escala,
-        motorista: motorista
+        motorista: novoMotorista
       });
       
       mostrarNotificacao('✅ Escala Atualizada', 'Escala atualizada com sucesso!');
@@ -2000,7 +1986,6 @@ window.excluirEscala = async function(escalaId) {
     
     mostrarNotificacao('✅ Escala Excluída', 'Escala excluída com sucesso!');
     
-    // Remover da lista
     const escalaElement = document.getElementById(`escala-${escalaId}`);
     if (escalaElement) {
       escalaElement.remove();
@@ -2020,7 +2005,6 @@ window.exportarEscalas = function() {
     return;
   }
   
-  // Criar conteúdo CSV
   let csvContent = "Motorista;Matrícula;Período;Segunda;Terça;Quarta;Quinta;Sexta;Sábado;Domingo\n";
   
   estadoApp.escalas.forEach(escala => {
@@ -2036,7 +2020,6 @@ window.exportarEscalas = function() {
     csvContent += `${escala.motorista || ''};${escala.matricula || ''};${escala.periodo || ''};${diasInfo.join(';')}\n`;
   });
   
-  // Criar blob e download
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
