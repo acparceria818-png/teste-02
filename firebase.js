@@ -192,18 +192,80 @@ function monitorarAvisos(callback) {
   });
 }
 
-// ================= ADMIN =================
-async function getFormsControleVeiculos() {
-  const dataLimite = new Date();
-  dataLimite.setDate(dataLimite.getDate() - 7);
-
-  const q = query(
-    collection(db, 'controle_veiculos'),
-    where("data", ">=", dataLimite)
-  );
-
-  const snapshot = await getDocs(q);
+// ================= RELATÓRIOS =================
+async function getRelatorios() {
+  const snapshot = await getDocs(collection(db, 'relatorios'));
   return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+// ================= ADMIN - FUNÇÕES DE EMERGÊNCIA =================
+async function resolverEmergencia(emergenciaId) {
+  const docRef = doc(db, 'emergencias', emergenciaId);
+  return await updateDoc(docRef, {
+    status: 'resolvida',
+    resolvidaEm: serverTimestamp()
+  });
+}
+
+// ================= ADMIN - FUNÇÕES DE FEEDBACK =================
+async function resolverFeedback(feedbackId) {
+  const docRef = doc(db, 'feedbacks', feedbackId);
+  return await updateDoc(docRef, {
+    status: 'resolvido',
+    resolvidoEm: serverTimestamp()
+  });
+}
+
+async function responderFeedback(feedbackId, resposta) {
+  const docRef = doc(db, 'feedbacks', feedbackId);
+  return await updateDoc(docRef, {
+    status: 'respondido',
+    resposta: resposta,
+    respondidoEm: serverTimestamp()
+  });
+}
+
+// ================= DASHBOARD =================
+async function getEstatisticasDashboard() {
+  const [rotasSnapshot, emergenciasSnapshot, feedbacksSnapshot] = await Promise.all([
+    getDocs(collection(db, 'rotas_em_andamento')),
+    getDocs(query(collection(db, 'emergencias'), where('status', '==', 'pendente'))),
+    getDocs(query(collection(db, 'feedbacks'), where('status', '==', 'pendente')))
+  ]);
+
+  return {
+    totalRotasAtivas: rotasSnapshot.docs.filter(doc => doc.data().ativo !== false).length,
+    totalEmergencias: emergenciasSnapshot.docs.length,
+    totalFeedbacks: feedbacksSnapshot.docs.length,
+    rotasPorTipo: await getRotasPorTipo(),
+    motoristasAtivos: await getMotoristasAtivos()
+  };
+}
+
+async function getRotasPorTipo() {
+  const snapshot = await getDocs(collection(db, 'rotas_em_andamento'));
+  const rotas = snapshot.docs.filter(doc => doc.data().ativo !== false);
+  
+  const tipos = {
+    'adm': 0,
+    'operacional': 0,
+    'retorno': 0
+  };
+  
+  rotas.forEach(rota => {
+    const nomeRota = rota.data().rota || '';
+    if (nomeRota.includes('ADM')) tipos.adm++;
+    else if (nomeRota.includes('RETORNO')) tipos.retorno++;
+    else tipos.operacional++;
+  });
+  
+  return tipos;
+}
+
+async function getMotoristasAtivos() {
+  const snapshot = await getDocs(collection(db, 'rotas_em_andamento'));
+  const rotas = snapshot.docs.filter(doc => doc.data().ativo !== false);
+  return rotas.length;
 }
 
 // ================= EXPORTAÇÕES =================
@@ -232,15 +294,19 @@ export {
   monitorarEmergencias,
   monitorarFeedbacks,
   monitorarAvisos,
-  getFormsControleVeiculos,
-  loginEmailSenha,
-  signOut,
-  // Novas funções
   getAvisos,
   updateAviso,
   deleteAviso,
   getEscalas,
   addEscala,
   updateEscala,
-  deleteEscala
+  deleteEscala,
+  // Novas funções
+  resolverEmergencia,
+  resolverFeedback,
+  responderFeedback,
+  getRelatorios,
+  getEstatisticasDashboard,
+  getRotasPorTipo,
+  getMotoristasAtivos
 };
